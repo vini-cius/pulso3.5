@@ -35,7 +35,7 @@ As releases publicadas pelo workflow incluem o instalador, o pacote ZIP e `lates
 https://github.com/<proprietário>/<repositório>/releases/latest/download/latest.json
 ```
 
-O Pulso compara versões, pede confirmação antes de instalar e confere o SHA-256 do pacote. Para criar uma release, publique uma tag `vMAJOR.MINOR.PATCH`, por exemplo `v3.5.0`; o GitHub Actions compila o código e anexa os arquivos à release.
+O Pulso compara versões, pede confirmação antes de instalar e confere o SHA-256 do pacote. Para criar uma release, publique uma tag `vMAJOR.MINOR.PATCH`, por exemplo `v1.0.0`; o GitHub Actions compila o código e anexa os arquivos à release.
 
 ## Compilar no Windows
 

@@ -27,7 +27,7 @@ namespace Controlador35 {
     }
 
     public static class UpdateManager {
-        const string FallbackVersion = "3.5.0";
+        const string FallbackVersion = "1.0.0";
         const int MaxManifestBytes = 128 * 1024;
         const int MaxPackageBytes = 120 * 1024 * 1024;
         static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
