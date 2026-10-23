@@ -47,12 +47,12 @@ jobs:
           $env:INNO_SETUP_COMPILER = Join-Path $installDir 'ISCC.exe'
           .\Preparar-Instalador.ps1 -SkipBuild
 
-      - name: Preparar pacote e manifesto do atualizador
+      - name: Preparar pacote portátil e manifesto do atualizador
         shell: pwsh
         run: |
           $tag = $env:GITHUB_REF_NAME
           $version = $env:RELEASE_VERSION
-          $zipName = "Pulso35-$version.zip"
+          $zipName = "Pulso35-Portable-$version.zip"
           $packageUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$tag/$zipName"
           .\Preparar-Atualizacao.ps1 -SkipBuild -PackageUrl $packageUrl -Notas "Versão $version do Pulso 3.5."
           $assets = @(
@@ -76,7 +76,7 @@ jobs:
           $tag = $env:GITHUB_REF_NAME
           gh release create $tag `
             "dist\Pulso35-Setup-$version.exe" `
-            "dist\atualizacao\Pulso35-$version.zip" `
+            "dist\atualizacao\Pulso35-Portable-$version.zip" `
             'dist\atualizacao\latest.json' `
             'dist\SHA256SUMS.txt' `
             --verify-tag --title "Pulso 3.5 $version" --generate-notes

@@ -2,7 +2,7 @@
 
 **Painel open source para telas USB.** O Pulso 3.5 monta e exibe um painel de computador em telas USB seriais de 3,5 polegadas. Inclui monitoramento de CPU, RAM, GPU e temperaturas, clima, editor visual de temas e execução contínua na bandeja do Windows.
 
-O programa foi desenvolvido para ser instalado em computadores diferentes. Preferências, temas e cidade do clima ficam no perfil local de cada usuário; não são fixados ao computador de desenvolvimento.
+O programa pode ser instalado em computadores diferentes. A instalação padrão guarda preferências no perfil local do usuário; a versão portátil guarda tudo na pasta extraída.
 
 ## Recursos
 
@@ -11,7 +11,7 @@ O programa foi desenvolvido para ser instalado em computadores diferentes. Prefe
 - Clima configurável por cidade; a configuração inicial é Mauá, São Paulo.
 - Editor de tema retrato e paisagem com camadas, arrastar e soltar, redimensionamento, imagens de fundo, texto dinâmico e prévia ao vivo.
 - Fechar ou minimizar a janela mantém o programa na bandeja e a tela atualizada. **Sair e parar a tela** encerra o controlador.
-- Instalador por usuário do Windows e verificação manual de atualizações a partir de releases HTTPS do GitHub.
+- Instalador padrão e versão portátil publicados nas Releases do GitHub.
 - Temas exportados em `.tema` podem ser compartilhados com outros computadores.
 
 ## Compatibilidade
@@ -21,35 +21,40 @@ O programa foi desenvolvido para ser instalado em computadores diferentes. Prefe
 - A temperatura de CPU pode exigir LibreHardwareMonitor ou OpenHardwareMonitor com a leitura WMI ativada. A temperatura de GPU NVIDIA usa o NVML do driver.
 - Clima requer internet; leituras de hardware, temas e comunicação USB funcionam localmente.
 
-## Instalação
+## Instalar ou usar a versão portátil
 
-Na página **Releases** do GitHub, baixe `Pulso35-Setup-<versão>.exe` e execute. A instalação fica em `%LOCALAPPDATA%\Programs\Pulso35` e não pede privilégios de administrador. Preferências e temas continuam em `%LOCALAPPDATA%\Controlador35`.
+Na página **Releases** do GitHub, escolha uma das opções:
+
+- **Instalador:** baixe `Pulso35-Setup-<versão>.exe` e execute. A instalação fica em `%LOCALAPPDATA%\Programs\Pulso35`, sem pedir privilégios de administrador. Preferências e temas ficam em `%LOCALAPPDATA%\Controlador35`.
+- **Portátil:** baixe `Pulso35-Portable-<versão>.zip` e extraia todos os arquivos para uma pasta onde você possa gravar. Execute `Pulso35.exe`. O marcador `portable.flag` faz com que as configurações, imagens e logs sejam salvos na subpasta `data`, que pode acompanhar o programa quando você mover a pasta para outro computador.
 
 Depois de abrir o aplicativo, conecte a tela USB e clique em **Conectar e mostrar**. Para deixá-lo ativo em segundo plano, feche a janela pelo X; use o menu do ícone na bandeja para reabrir ou sair.
 
 ## Atualizações
 
-O botão **Atualizações…** consulta a release mais recente deste repositório no GitHub. As releases publicadas pelo workflow incluem o instalador, o pacote ZIP e `latest.json`. O Pulso compara versões, pede confirmação antes de instalar e confere o SHA-256 do pacote.
+O botão **Atualizações…** consulta a release mais recente deste repositório no GitHub. O Pulso compara versões, pede confirmação, confere o SHA-256 do pacote e atualiza os arquivos do aplicativo. A versão portátil precisa estar em uma pasta com permissão de gravação para receber atualizações pelo botão; também é possível baixar e extrair o ZIP portátil da nova release.
 
-Para criar uma release, publique uma tag `vMAJOR.MINOR.PATCH`, por exemplo `v1.0.0`; o GitHub Actions compila o código e anexa os arquivos à release.
+Cada release publica o instalador, o ZIP portátil, `latest.json` e `SHA256SUMS.txt`. Para criar uma release, envie uma tag `vMAJOR.MINOR.PATCH`, por exemplo `v1.0.0`; o GitHub Actions compila o código e anexa os arquivos automaticamente.
 
 ## Compilar no Windows
 
-Requisitos: PowerShell e compilador do .NET Framework instalado pelo Windows. Se o Inno Setup 6 ou 7 não estiver instalado, `Preparar-Instalador.ps1` baixa o compilador oficial, valida a assinatura digital e o usa em uma pasta temporária.
+Requisitos: PowerShell, compilador do .NET Framework e Windows 10/11 SDK. Se o Inno Setup 6 ou 7 não estiver instalado, `Preparar-Instalador.ps1` baixa o compilador oficial, valida sua assinatura digital e o usa temporariamente.
 
 ```powershell
 .\Compilar.ps1
-.\Preparar-Instalador.ps1
-.\Preparar-Atualizacao.ps1 -Notas "Descrição da versão"
+.\Preparar-Instalador.ps1 -SkipBuild
+.\Preparar-Atualizacao.ps1 -SkipBuild
 ```
 
-O aplicativo compilado fica em `dist\app`. A atualização fica em `dist\atualizacao`; publique `latest.json` e o ZIP juntos em HTTPS. O workflow de release recebe a URL absoluta do pacote do próprio GitHub. Os scripts também aceitam `-SkipBuild` para reaproveitar a compilação atual.
+O aplicativo compilado fica em `dist\app`; o instalador fica em `dist`; o ZIP portátil e `latest.json` ficam em `dist\atualizacao`. Para uma publicação, o workflow configura no manifesto o endereço HTTPS do ZIP correspondente à release.
 
-O workflow `CI` compila em Windows para alterações e pull requests. `Publicar release` é executado para tags `v*`, monta o instalador com Inno Setup e publica os artefatos. Nenhum segredo de publicação é necessário: o workflow usa o `GITHUB_TOKEN` com acesso de escrita somente a releases.
+O workflow `CI` compila no Windows e verifica o pacote portátil. **Publicar release** é executado para tags `v*`, monta o instalador com Inno Setup e publica os artefatos. Nenhum segredo é necessário: o workflow usa o `GITHUB_TOKEN` apenas para criar a release.
 
-## Preferências e dados locais
+## Dados locais e assinatura
 
-Os dados ficam em `%LOCALAPPDATA%\Controlador35`: tema, imagens, cidade e logs. A desinstalação não remove essa pasta. O aplicativo não configura inicialização automática com o Windows.
+Na instalação padrão, os dados ficam em `%LOCALAPPDATA%\Controlador35`; a desinstalação não remove essa pasta. No modo portátil, os dados ficam em `data` junto ao executável. O aplicativo não configura inicialização automática com o Windows.
+
+Os executáveis publicados não têm assinatura Authenticode. O certificado autoassinado de desenvolvimento não é usado na release e não torna os arquivos confiáveis nos computadores de outras pessoas. Por isso, o Smart App Control pode bloquear o instalador ou o aplicativo até que haja uma assinatura de um emissor confiável ou reputação suficiente.
 
 ## Contribuir e segurança
 
@@ -58,5 +63,3 @@ Leia [CONTRIBUTING.md](CONTRIBUTING.md) antes de abrir pull requests. Problemas 
 ## Licença e marcas
 
 O projeto está sob GNU GPL versão 3 ou, a seu critério, qualquer versão posterior; consulte [LICENSE](LICENSE). A referência pública de protocolo para telas Turing Smart Screen está sob GPL-3.0. Este projeto não é afiliado nem endossado por Turing, XuanFang, Kipye ou fabricantes relacionados; os nomes e marcas pertencem a seus respectivos titulares.
-
-Os pacotes gerados não têm assinatura Authenticode. Releases são montadas pelo GitHub Actions a partir do código publicado.

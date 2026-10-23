@@ -23,7 +23,10 @@ using System.Windows.Forms;
 namespace Controlador35 {
     public static class Paths {
         public static readonly string Root = AppDomain.CurrentDomain.BaseDirectory;
-        public static readonly string UserData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Controlador35");
+        public static readonly bool IsPortable = File.Exists(Path.Combine(Root, "portable.flag"));
+        public static readonly string UserData = IsPortable
+            ? Path.Combine(Root, "data")
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Controlador35");
         public static readonly string Logs = Path.Combine(UserData, "logs");
         public static string UserFile(string name) { Directory.CreateDirectory(UserData); return Path.Combine(UserData,name); }
         public static void Log(string text) {

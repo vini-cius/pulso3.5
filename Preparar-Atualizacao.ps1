@@ -17,7 +17,7 @@ if (-not [string]::IsNullOrWhiteSpace($PackageUrl)) {
 $appDir = Join-Path $PSScriptRoot 'dist\app'
 $releaseDir = Join-Path $PSScriptRoot 'dist\atualizacao'
 New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
-$package = Join-Path $releaseDir ("Pulso35-{0}.zip" -f $version)
+$package = Join-Path $releaseDir ("Pulso35-Portable-{0}.zip" -f $version)
 if (Test-Path $package) { Remove-Item $package -Force }
 
 Add-Type -AssemblyName System.IO.Compression
@@ -29,6 +29,7 @@ try {
         if (-not (Test-Path $file)) { throw "Arquivo da versão ausente: $file" }
         [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $file, $name, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
     }
+    $archive.CreateEntry('portable.flag', [System.IO.Compression.CompressionLevel]::NoCompression) | Out-Null
 } finally { $archive.Dispose() }
 
 $hash = (Get-FileHash -Path $package -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -42,4 +43,4 @@ $manifest = [ordered]@{
 }
 $json = ConvertTo-Json -InputObject $manifest -Depth 4
 [System.IO.File]::WriteAllText((Join-Path $releaseDir 'latest.json'), $json + "`n", (New-Object System.Text.UTF8Encoding($false)))
-Write-Output "Pacote e manifesto prontos em $releaseDir. Publique os dois arquivos juntos em um endereço HTTPS."
+Write-Output "Pacote portátil e manifesto de atualização prontos em $releaseDir."

@@ -102,15 +102,20 @@ namespace Controlador35 {
 
         static Dictionary<string, byte[]> ReadPackage(byte[] bytes, string expectedVersion) {
             var files = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+            var entryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             using (var memory = new MemoryStream(bytes, false))
             using (var archive = new ZipArchive(memory, ZipArchiveMode.Read, false, Encoding.UTF8)) {
                 foreach (ZipArchiveEntry entry in archive.Entries) {
                     string name = entry.FullName;
                     if (name.IndexOf('/') >= 0 || name.IndexOf('\\') >= 0 ||
-                        (name != "Pulso35.exe" && name != "versao.txt"))
+                        (name != "Pulso35.exe" && name != "versao.txt" && name != "portable.flag"))
                         throw new InvalidDataException("O pacote contém um arquivo não permitido: " + name);
-                    if (files.ContainsKey(name)) throw new InvalidDataException("O pacote contém arquivos duplicados.");
+                    if (!entryNames.Add(name)) throw new InvalidDataException("O pacote contém arquivos duplicados.");
                     if (entry.Length > MaxPackageBytes) throw new InvalidDataException("Um arquivo do pacote é grande demais.");
+                    if (name == "portable.flag") {
+                        if (entry.Length != 0) throw new InvalidDataException("O marcador de versão portátil precisa estar vazio.");
+                        continue;
+                    }
                     using (Stream input = entry.Open())
                     using (var output = new MemoryStream()) { input.CopyTo(output); files.Add(name, output.ToArray()); }
                 }

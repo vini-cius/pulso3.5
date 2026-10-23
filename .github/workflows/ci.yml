@@ -27,3 +27,23 @@ jobs:
             if (-not (Test-Path (Join-Path 'dist\app' $file))) { throw "Saída de compilação ausente: $file" }
           }
           if (Test-Path 'dist\app\Pulso35-Diagnostico.exe') { throw 'A compilação não deve gerar o executável de diagnóstico.' }
+
+      - name: Validar pacote portátil
+        shell: pwsh
+        run: |
+          .\Preparar-Atualizacao.ps1 -SkipBuild
+          $version = (Get-Content 'versao.txt' -Raw).Trim()
+          $package = Join-Path 'dist\atualizacao' "Pulso35-Portable-$version.zip"
+          if (-not (Test-Path $package)) { throw "Pacote portátil ausente: $package" }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $package))
+          try {
+            $entries = @($archive.Entries | ForEach-Object { $_.FullName })
+            foreach ($entry in @('Pulso35.exe', 'versao.txt', 'portable.flag')) {
+              if ($entries -notcontains $entry) { throw "Arquivo obrigatório ausente no ZIP portátil: $entry" }
+            }
+            $marker = $archive.GetEntry('portable.flag')
+            if ($marker.Length -ne 0) { throw 'O marcador portable.flag deve estar vazio.' }
+          } finally {
+            $archive.Dispose()
+          }
