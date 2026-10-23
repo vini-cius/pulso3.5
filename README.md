@@ -29,13 +29,9 @@ Depois de abrir o aplicativo, conecte a tela USB e clique em **Conectar e mostra
 
 ## Atualizações
 
-As releases publicadas pelo workflow incluem o instalador, o pacote ZIP e `latest.json`. O instalador e as atualizações já vêm configurados para o canal desse repositório. Se precisar trocar de canal, clique em **Atualizações…** e informe o endereço do manifesto:
+O botão **Atualizações…** consulta a release mais recente deste repositório no GitHub. As releases publicadas pelo workflow incluem o instalador, o pacote ZIP e `latest.json`. O Pulso compara versões, pede confirmação antes de instalar e confere o SHA-256 do pacote.
 
-```text
-https://github.com/<proprietário>/<repositório>/releases/latest/download/latest.json
-```
-
-O Pulso compara versões, pede confirmação antes de instalar e confere o SHA-256 do pacote. Para criar uma release, publique uma tag `vMAJOR.MINOR.PATCH`, por exemplo `v1.0.0`; o GitHub Actions compila o código e anexa os arquivos à release.
+Para criar uma release, publique uma tag `vMAJOR.MINOR.PATCH`, por exemplo `v1.0.0`; o GitHub Actions compila o código e anexa os arquivos à release.
 
 ## Compilar no Windows
 
@@ -61,7 +57,7 @@ O comando `--probe` envia conteúdo para a tela física e deve ser usado somente
 
 ## Preferências e dados locais
 
-Os dados ficam em `%LOCALAPPDATA%\Controlador35`: tema, imagens, cidade, endereço de atualizações e logs. A desinstalação não remove essa pasta. O aplicativo não configura inicialização automática com o Windows.
+Os dados ficam em `%LOCALAPPDATA%\Controlador35`: tema, imagens, cidade e logs. A desinstalação não remove essa pasta. O aplicativo não configura inicialização automática com o Windows.
 
 ## Contribuir e segurança
 

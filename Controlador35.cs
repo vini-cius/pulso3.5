@@ -310,16 +310,9 @@ namespace Controlador35 {
         }
         async Task CheckForUpdates() {
             if(checkingUpdate || shuttingDown) return;
-            string currentUrl=UpdateManager.LoadManifestUrl();
-            using(var dialog=new UpdateSourceForm(currentUrl)) {
-                if(dialog.ShowDialog(this)!=DialogResult.OK) return;
-                try { UpdateManager.SaveManifestUrl(dialog.ManifestUrl); }
-                catch(Exception ex) { MessageBox.Show(this,ex.Message,"Endereço de atualização",MessageBoxButtons.OK,MessageBoxIcon.Warning); return; }
-            }
             checkingUpdate=true; updates.Enabled=false; status.Text="Verificando atualizações…";
             try {
-                string url=UpdateManager.LoadManifestUrl();
-                UpdateRelease release=await Task.Run(()=>UpdateManager.Check(url));
+                UpdateRelease release=await Task.Run(()=>UpdateManager.CheckLatest());
                 if(!release.IsNewer) {
                     status.Text="O Pulso 3.5 já está atualizado ("+UpdateManager.CurrentVersion+").";
                     MessageBox.Show(this,"Você já está usando a versão mais recente.","Atualizações",MessageBoxButtons.OK,MessageBoxIcon.Information); return;

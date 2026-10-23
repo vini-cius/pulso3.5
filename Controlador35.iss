@@ -32,7 +32,6 @@ Name: "desktopicon"; Description: "Criar atalho na área de trabalho"; GroupDesc
 Source: "dist\app\Pulso35.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "dist\app\Pulso35-Diagnostico.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "dist\app\versao.txt"; DestDir: "{app}"; Flags: ignoreversion
-Source: "dist\app\atualizador.json"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\Pulso 3.5"; Filename: "{app}\Pulso35.exe"

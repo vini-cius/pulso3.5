@@ -5,7 +5,6 @@ $panel = Join-Path $PSScriptRoot 'Painel35.cs'
 $designer = Join-Path $PSScriptRoot 'ThemeDesigner.cs'
 $updater = Join-Path $PSScriptRoot 'UpdateManager.cs'
 $versionFile = Join-Path $PSScriptRoot 'versao.txt'
-$updateConfig = Join-Path $PSScriptRoot 'atualizador.json'
 $outputDir = Join-Path $PSScriptRoot 'dist\app'
 if (-not (Test-Path $compiler)) { throw "Compilador .NET Framework não encontrado: $compiler" }
 if (-not (Test-Path $versionFile)) { throw "Arquivo de versão não encontrado: $versionFile" }
@@ -13,7 +12,7 @@ $version = (Get-Content $versionFile -Raw).Trim()
 if ($version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') { throw "Versão inválida em versao.txt: $version" }
 New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
 Copy-Item $versionFile (Join-Path $outputDir 'versao.txt') -Force
-Copy-Item $updateConfig (Join-Path $outputDir 'atualizador.json') -Force
+Remove-Item (Join-Path $outputDir 'atualizador.json') -Force -ErrorAction SilentlyContinue
 foreach ($target in @(@('Pulso35.exe', 'winexe'), @('Pulso35-Diagnostico.exe', 'exe'))) {
     $output = Join-Path $outputDir $target[0]
     $compilerArgs = @('/nologo', '/optimize+', ('/target:' + $target[1]), '/platform:x64', ('/out:"' + $output + '"'), '/reference:System.dll', '/reference:System.Core.dll', '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll', '/reference:System.Management.dll', '/reference:System.Web.Extensions.dll', '/reference:System.IO.Compression.dll', '/reference:System.IO.Compression.FileSystem.dll', ('"' + $updater + '"'), ('"' + $panel + '"'), ('"' + $designer + '"'), ('"' + $source + '"'))

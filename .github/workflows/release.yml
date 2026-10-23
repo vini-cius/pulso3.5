@@ -31,13 +31,6 @@ jobs:
         shell: pwsh
         run: .\Compilar.ps1
 
-      - name: Configurar canal do repositório
-        shell: pwsh
-        run: |
-          $manifestUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/latest/download/latest.json"
-          $config = @{ manifestUrl = $manifestUrl } | ConvertTo-Json
-          [System.IO.File]::WriteAllText((Join-Path 'dist\app' 'atualizador.json'), $config, (New-Object System.Text.UTF8Encoding($false)))
-
       - name: Baixar e validar Inno Setup oficial
         shell: pwsh
         run: |

@@ -27,6 +27,7 @@ namespace Controlador35 {
     }
 
     public static class UpdateManager {
+        const string LatestReleaseManifest = "https://github.com/vini-cius/pulso3.5/releases/latest/download/latest.json";
         const string FallbackVersion = "1.0.0";
         const int MaxManifestBytes = 128 * 1024;
         const int MaxPackageBytes = 120 * 1024 * 1024;
@@ -43,32 +44,8 @@ namespace Controlador35 {
             }
         }
 
-        public static string LoadManifestUrl() {
-            try {
-                string userPath = Path.Combine(Paths.UserData, "atualizador.json");
-                string path = File.Exists(userPath) ? userPath : Path.Combine(Paths.Root, "atualizador.json");
-                if (!File.Exists(path)) return "";
-                var settings = Json.Deserialize<UpdateSettings>(File.ReadAllText(path, Encoding.UTF8));
-                return settings == null || settings.manifestUrl == null ? "" : settings.manifestUrl.Trim();
-            } catch { return ""; }
-        }
-
-        public static string ValidateManifestUrl(string value) {
-            Uri uri;
-            if (String.IsNullOrWhiteSpace(value) || !Uri.TryCreate(value.Trim(), UriKind.Absolute, out uri) ||
-                !String.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Informe o endereço HTTPS do arquivo latest.json.");
-            return uri.AbsoluteUri;
-        }
-
-        public static void SaveManifestUrl(string value) {
-            string valid = ValidateManifestUrl(value);
-            string path = Paths.UserFile("atualizador.json");
-            File.WriteAllText(path, Json.Serialize(new UpdateSettings { manifestUrl = valid }), new UTF8Encoding(false));
-        }
-
-        public static UpdateRelease Check(string manifestUrl) {
-            Uri requested = new Uri(ValidateManifestUrl(manifestUrl));
+        public static UpdateRelease CheckLatest() {
+            Uri requested = new Uri(LatestReleaseManifest, UriKind.Absolute);
             byte[] bytes = Download(requested, MaxManifestBytes);
             UpdateRelease release = Json.Deserialize<UpdateRelease>(Encoding.UTF8.GetString(bytes));
             if (release == null) throw new InvalidDataException("O manifesto de atualização está vazio.");
@@ -130,7 +107,7 @@ namespace Controlador35 {
                 foreach (ZipArchiveEntry entry in archive.Entries) {
                     string name = entry.FullName;
                     if (name.IndexOf('/') >= 0 || name.IndexOf('\\') >= 0 ||
-                        (name != "Pulso35.exe" && name != "Pulso35-Diagnostico.exe" && name != "versao.txt" && name != "atualizador.json"))
+                        (name != "Pulso35.exe" && name != "Pulso35-Diagnostico.exe" && name != "versao.txt"))
                         throw new InvalidDataException("O pacote contém um arquivo não permitido: " + name);
                     if (files.ContainsKey(name)) throw new InvalidDataException("O pacote contém arquivos duplicados.");
                     if (entry.Length > MaxPackageBytes) throw new InvalidDataException("Um arquivo do pacote é grande demais.");
@@ -224,29 +201,5 @@ namespace Controlador35 {
             } catch (ArgumentException) { }
         }
 
-        public sealed class UpdateSettings { public string manifestUrl { get; set; } }
-    }
-
-    public sealed class UpdateSourceForm : Form {
-        readonly TextBox address = new TextBox();
-        public string ManifestUrl { get; private set; }
-
-        public UpdateSourceForm(string current) {
-            Text = "Canal de atualizações"; StartPosition = FormStartPosition.CenterParent;
-            FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false;
-            ShowInTaskbar = false; ClientSize = new System.Drawing.Size(510, 160);
-            var description = new Label { Text = "Endereço HTTPS do latest.json publicado pelo responsável pelo aplicativo:", AutoSize = false };
-            description.SetBounds(16, 15, 478, 25);
-            address.Text = current ?? ""; address.SetBounds(16, 47, 478, 26); address.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            var hint = new Label { Text = "O endereço fica salvo somente neste usuário do Windows.", AutoSize = false, ForeColor = System.Drawing.Color.DimGray };
-            hint.SetBounds(16, 80, 478, 22);
-            var cancel = new Button { Text = "Cancelar", DialogResult = DialogResult.Cancel }; cancel.SetBounds(329, 116, 78, 30);
-            var check = new Button { Text = "Salvar e verificar", DialogResult = DialogResult.None }; check.SetBounds(412, 116, 100, 30);
-            check.Click += delegate {
-                try { ManifestUrl = UpdateManager.ValidateManifestUrl(address.Text); DialogResult = DialogResult.OK; Close(); }
-                catch (Exception ex) { MessageBox.Show(this, ex.Message, "Canal de atualizações", MessageBoxButtons.OK, MessageBoxIcon.Warning); address.Focus(); }
-            };
-            Controls.AddRange(new Control[] { description, address, hint, cancel, check }); AcceptButton = check; CancelButton = cancel;
-        }
     }
 }

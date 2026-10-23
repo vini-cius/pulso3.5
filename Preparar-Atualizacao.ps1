@@ -24,7 +24,7 @@ Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $archive = [System.IO.Compression.ZipFile]::Open($package, [System.IO.Compression.ZipArchiveMode]::Create)
 try {
-    foreach ($name in @('Pulso35.exe', 'Pulso35-Diagnostico.exe', 'versao.txt', 'atualizador.json')) {
+    foreach ($name in @('Pulso35.exe', 'Pulso35-Diagnostico.exe', 'versao.txt')) {
         $file = Join-Path $appDir $name
         if (-not (Test-Path $file)) { throw "Arquivo da versão ausente: $file" }
         [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $file, $name, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
