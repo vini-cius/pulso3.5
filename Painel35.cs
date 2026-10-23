@@ -21,6 +21,7 @@ namespace Controlador35 {
     public sealed class Metrics {
         public double? Cpu, Ram, Gpu, CpuTemperature, GpuTemperature;
         public double UsedGb, TotalGb;
+        public GamerTelemetry Gamer=new GamerTelemetry();
         public DateTime At;
     }
     public sealed class Sensors {
@@ -144,6 +145,7 @@ namespace Controlador35 {
         public int Background=0x000F1D2B,Foreground=0x00FFFFFF,Muted=0x00B4CADC,
             CpuAccent=0x0067CCE6,RamAccent=0x006FD7A8,GpuAccent=0x00F4BE68,WeatherAccent=0x0067CCE6,ClockSize=44;
         public bool ShowSeconds=true;
+        public bool GameWidgetMigrationApplied;
         public ThemeCanvas Portrait,Landscape;
         public ThemeConfig() { Portrait=ThemeDefaults.Create(this,false); Landscape=ThemeDefaults.Create(this,true); }
         public ThemeCanvas Canvas(bool landscape) { return landscape?Landscape:Portrait; }
@@ -177,7 +179,14 @@ namespace Controlador35 {
                 canvas.Widgets.Add(new ThemeWidget{Type="GPU_TEMP",Name="Temp. GPU",X=166,Y=294,Width=136,Height=34,FontSize=17,AccentKey="GpuAccent"});
                 canvas.Widgets.Add(new ThemeWidget{Type="Weather",Name="Clima",X=18,Y=350,Width=284,Height=108,FontSize=20,AccentKey="WeatherAccent"});
             }
+            canvas.Widgets.Add(CreateGameWidget(landscape));
             return canvas;
+        }
+        static ThemeWidget CreateGameWidget(bool landscape) {
+            return new ThemeWidget {
+                Type="Game",Name="Jogo / FPS",X=18,Y=landscape?218:350,Width=landscape?444:284,Height=landscape?84:108,
+                FontSize=34,Color=0x00FFB454,FillColor=0x000B121E,UseFill=true
+            };
         }
         public static void Ensure(ThemeConfig theme,bool legacy) {
             if(theme==null)return;
@@ -185,8 +194,16 @@ namespace Controlador35 {
             if(theme.Landscape==null || legacy)theme.Landscape=Create(theme,true);
             if(theme.Portrait.Widgets==null)theme.Portrait.Widgets=Create(theme,false).Widgets;
             if(theme.Landscape.Widgets==null)theme.Landscape.Widgets=Create(theme,true).Widgets;
+            if(!theme.GameWidgetMigrationApplied) {
+                EnsureGameWidget(theme.Portrait,false);EnsureGameWidget(theme.Landscape,true);
+                theme.GameWidgetMigrationApplied=true;
+            }
             NormalizeCanvas(theme.Portrait,320,480);NormalizeCanvas(theme.Landscape,480,320);
             if(!String.Equals(theme.Orientation,"Landscape",StringComparison.OrdinalIgnoreCase))theme.Orientation="Portrait";
+        }
+        static void EnsureGameWidget(ThemeCanvas canvas,bool landscape) {
+            if(canvas.Widgets.Any(item=>String.Equals(item.Type,"Game",StringComparison.OrdinalIgnoreCase)))return;
+            canvas.Widgets.Add(CreateGameWidget(landscape));
         }
         static void NormalizeCanvas(ThemeCanvas canvas,int width,int height) {
             canvas.Widgets=canvas.Widgets.Where(item=>item!=null).ToList();
@@ -424,7 +441,18 @@ namespace Controlador35 {
                 .Replace("%GPU%",MetricValue("GPU",metrics,stale)).Replace("%CPU_TEMP%",MetricValue("CPU_TEMP",metrics,stale))
                 .Replace("%GPU_TEMP%",MetricValue("GPU_TEMP",metrics,stale)).Replace("%TIME%",now.ToString(theme.ShowSeconds?"HH:mm:ss":"HH:mm"))
                 .Replace("%DATE%",now.ToString("dd/MM/yyyy",Pt)).Replace("%CITY%",weather==null?"":weather.City)
-                .Replace("%WEATHER%",weather==null?"":weather.Detail).Replace("%HEX%",ColorHex(theme.Foreground));
+                .Replace("%WEATHER%",weather==null?"":weather.Detail).Replace("%HEX%",ColorHex(theme.Foreground))
+                .Replace("%FPS%",GamerValue("FPS",metrics)).Replace("%FRAME_TIME%",GamerValue("FRAME_TIME",metrics))
+                .Replace("%FPS_AVG%",GamerValue("FPS_AVG",metrics)).Replace("%FPS_1_LOW%",GamerValue("FPS_1_LOW",metrics))
+                .Replace("%GAME%",GamerValue("GAME",metrics));
+        }
+        static string GamerValue(string key,Metrics metrics) {
+            GamerTelemetry game=metrics==null?null:metrics.Gamer;
+            if(game==null||!game.Active||game.At==default(DateTime)||(DateTime.Now-game.At).TotalSeconds>2)return "—";
+            if(key=="GAME")return String.IsNullOrWhiteSpace(game.GameName)?"Jogo":game.GameName;
+            double? value=key=="FPS"?game.Fps:key=="FRAME_TIME"?game.FrameTimeMs:key=="FPS_AVG"?game.AverageFps:key=="FPS_1_LOW"?game.OnePercentLowFps:null;
+            if(!value.HasValue)return "—";
+            return value.Value.ToString(key=="FRAME_TIME"?"0.0":"0",CultureInfo.InvariantCulture)+(key=="FRAME_TIME"?" ms":"");
         }
         static void DrawMetric(Graphics g,ThemeWidget item,Rectangle b,Color accent,Metrics m,Weather weather,bool stale,ThemeConfig theme) {
             string type=(item.Type??"").ToUpperInvariant();int size=Math.Max(10,item.FontSize);Color foreground=C(theme.Foreground),muted=C(theme.Muted);
@@ -453,6 +481,42 @@ namespace Controlador35 {
                 if(ratio.HasValue)using(var bar=new SolidBrush(accent))g.FillRectangle(bar,b.X,y,(int)(b.Width*Math.Max(0,Math.Min(100,ratio.Value))/100),h);
             }
         }
+        static void DrawGameWidget(Graphics g,ThemeWidget item,Rectangle b,Color accent,Metrics metrics,DateTime now,Weather weather,ThemeConfig theme,bool stale) {
+            GamerTelemetry game=metrics==null?null:metrics.Gamer;
+            if(game==null||!game.Active||game.At==default(DateTime)||(DateTime.Now-game.At).TotalSeconds>2)return;
+            if(!String.IsNullOrWhiteSpace(item.Text)) {
+                DrawText(g,Expand(item.Text,now,metrics,weather,theme,stale),item,b,C(item.Color,accent),item.FontSize,item.Bold);return;
+            }
+            if(item.UseFill)using(var fill=new SolidBrush(C(item.FillColor,Color.FromArgb(238,11,18,30))))g.FillRectangle(fill,b);
+            using(var edge=new Pen(Color.FromArgb(95,accent),1))g.DrawRectangle(edge,b.X,b.Y,b.Width-1,b.Height-1);
+            using(var marker=new SolidBrush(Color.FromArgb(255,180,84)))g.FillRectangle(marker,b.X,b.Y,3,b.Height);
+            int pad=10;
+            DrawText(g,String.IsNullOrWhiteSpace(game.GameName)?"JOGO EM FOCO":game.GameName,item,
+                new Rectangle(b.X+pad,b.Y+3,b.Width-pad*2,16),accent,11,true);
+            string fps=game.Fps.HasValue?game.Fps.Value.ToString("0",CultureInfo.InvariantCulture):"—";
+            DrawText(g,fps,item,new Rectangle(b.X+pad,b.Y+17,108,48),C(theme.Foreground),Math.Max(24,Math.Min(44,item.FontSize+6)),true);
+            DrawText(g,"FPS",item,new Rectangle(b.X+pad+82,b.Y+36,42,20),accent,11,true);
+            int rightX=b.X+Math.Min(132,Math.Max(112,b.Width/2));
+            DrawText(g,"FRAME TIME",item,new Rectangle(rightX,b.Y+22,b.Right-rightX-pad,15),C(theme.Muted),9,true);
+            string frame=game.FrameTimeMs.HasValue?game.FrameTimeMs.Value.ToString("0.0",CultureInfo.InvariantCulture)+" ms":"—";
+            DrawText(g,frame,item,new Rectangle(rightX,b.Y+37,b.Right-rightX-pad,25),C(theme.Foreground),18,true);
+            if(b.Height>=94) {
+                string cpu="CPU "+MetricValue("CPU",metrics,stale);
+                if(metrics!=null&&metrics.CpuTemperature.HasValue)cpu+=" "+MetricValue("CPU_TEMP",metrics,stale);
+                string gpu="GPU "+MetricValue("GPU",metrics,stale);
+                if(metrics!=null&&metrics.GpuTemperature.HasValue)gpu+=" "+MetricValue("GPU_TEMP",metrics,stale);
+                DrawText(g,cpu+"   ·   "+gpu,item,new Rectangle(b.X+pad,b.Y+66,b.Width-pad*2,16),C(theme.Muted),10,false);
+            }
+            if(game.FrameTimeMs.HasValue&&b.Height>=72) {
+                int barY=b.Bottom-8,barX=b.X+pad,barWidth=Math.Max(8,b.Width-pad*2);
+                using(var track=new SolidBrush(Color.FromArgb(55,accent)))g.FillRectangle(track,barX,barY,barWidth,3);
+                double ms=game.FrameTimeMs.Value;
+                int fillWidth=(int)(barWidth*Math.Max(0,Math.Min(1,ms/33.3)));
+                Color barColor=ms<=16.7?Color.FromArgb(91,229,213):ms<=33.3?Color.FromArgb(255,180,84):Color.FromArgb(255,111,123);
+                if(fillWidth>0)using(var fill=new SolidBrush(barColor))g.FillRectangle(fill,barX,barY,fillWidth,3);
+                using(var tick=new Pen(Color.FromArgb(225,235,242,249),1))g.DrawLine(tick,barX+barWidth/2,barY-2,barX+barWidth/2,barY+5);
+            }
+        }
         static void DrawWidget(Graphics g,ThemeWidget item,Rectangle bounds,DateTime now,Metrics metrics,Weather weather,ThemeConfig theme,bool stale) {
             if(!item.Visible||bounds.Width<=0||bounds.Height<=0)return;
             GraphicsState state=g.Save();g.SetClip(bounds);Color accent=Accent(item,theme);Color foreground=C(theme.Foreground);
@@ -471,6 +535,7 @@ namespace Controlador35 {
                 if(item.Type=="Clock") { DrawText(g,now.ToString(theme.ShowSeconds?"HH:mm:ss":"HH:mm"),item,bounds,C(item.Color,foreground),item.FontSize,item.Bold);return; }
                 if(item.Type=="Date") { DrawText(g,now.ToString(String.IsNullOrWhiteSpace(item.Text)?"ddd, dd MMM":item.Text,Pt),item,bounds,C(item.Color,C(theme.Muted)),item.FontSize,item.Bold);return; }
                 if(item.Type=="Text") { DrawText(g,Expand(item.Text,now,metrics,weather,theme,stale),item,bounds,C(item.Color,foreground),item.FontSize,item.Bold);return; }
+                if(item.Type=="Game") { DrawGameWidget(g,item,bounds,Accent(item,theme),metrics,now,weather,theme,stale);return; }
                 if(item.Type=="Weather") {
                     string city=weather==null?"Mauá, SP":weather.City;string temperature=weather!=null&&weather.Temperature.HasValue?weather.Temperature.Value.ToString("0",CultureInfo.InvariantCulture)+"°C":"—°C";
                     int line=Math.Max(16,item.FontSize);int cityHeight=Math.Min(bounds.Height,line+2);DrawText(g,city.ToUpper(Pt),item,new Rectangle(bounds.X,bounds.Y,bounds.Width,cityHeight),accent,Math.Max(10,line*2/3),true);

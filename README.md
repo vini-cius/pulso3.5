@@ -8,9 +8,11 @@ O programa pode ser instalado em computadores diferentes. A instalação padrão
 
 - Relógio e data em português, com opção de mostrar segundos.
 - Uso de CPU, RAM e GPU; temperaturas de CPU/GPU quando o hardware e o provedor de sensores oferecem esses dados.
+- Modo gamer automático: detecta jogos monitorados em primeiro plano pelo RTSS e lê FPS/frame time do RTSS ou do MSI Afterburner; média e 1% low aparecem quando o Afterburner os fornece. O cartão gamer aparece enquanto o jogo está em foco; modelos anteriores recebem esse cartão na atualização do tema.
 - Clima configurável por cidade; a configuração inicial é Mauá, São Paulo.
 - Editor de tema retrato e paisagem com camadas, arrastar e soltar, redimensionamento, imagens de fundo, texto dinâmico e prévia ao vivo.
 - Fechar ou minimizar a janela mantém o programa na bandeja e a tela atualizada. **Sair e parar a tela** encerra o controlador.
+- Inicialização automática opcional pelo Windows, configurável na janela principal ou no menu da bandeja, sem privilégios de administrador.
 - Instalador padrão e versão portátil publicados nas Releases do GitHub.
 - Temas exportados em `.tema` podem ser compartilhados com outros computadores.
 
@@ -19,6 +21,7 @@ O programa pode ser instalado em computadores diferentes. A instalação padrão
 - Windows x64 e .NET Framework 4.5 ou superior.
 - O código de comunicação identifica telas seriais compatíveis pelo VID `1A86` e PID `5722`, usando o painel em 320 × 480 ou 480 × 320. Outras revisões e modelos precisam de validação física.
 - A temperatura de CPU pode exigir LibreHardwareMonitor ou OpenHardwareMonitor com a leitura WMI ativada. A temperatura de GPU NVIDIA usa o NVML do driver.
+- FPS e frame time requerem RTSS ou MSI Afterburner em execução e com dados disponíveis para o jogo. O Pulso só lê as memórias compartilhadas desses programas; não injeta código no jogo nem altera configurações, e não os inclui na instalação.
 - Clima requer internet; leituras de hardware, temas e comunicação USB funcionam localmente.
 
 ## Instalar ou usar a versão portátil
@@ -28,7 +31,7 @@ Na página **Releases** do GitHub, escolha uma das opções:
 - **Instalador:** baixe `Pulso35-Setup-<versão>.exe` e execute. A instalação fica em `%LOCALAPPDATA%\Programs\Pulso35`, sem pedir privilégios de administrador. Preferências e temas ficam em `%LOCALAPPDATA%\Controlador35`.
 - **Portátil:** baixe `Pulso35-Portable-<versão>.zip` e extraia todos os arquivos para uma pasta onde você possa gravar. Execute `Pulso35.exe`. O marcador `portable.flag` faz com que as configurações, imagens e logs sejam salvos na subpasta `data`, que pode acompanhar o programa quando você mover a pasta para outro computador.
 
-Depois de abrir o aplicativo, conecte a tela USB e clique em **Conectar e mostrar**. Para deixá-lo ativo em segundo plano, feche a janela pelo X; use o menu do ícone na bandeja para reabrir ou sair.
+Depois de abrir o aplicativo, conecte a tela USB e clique em **Conectar e mostrar**. Para deixá-lo ativo em segundo plano, feche a janela pelo X; use o menu do ícone na bandeja para reabrir, ativar a inicialização com o Windows ou sair. Quando essa opção está ligada, o Pulso inicia oculto na bandeja, procura a tela e conecta automaticamente quando encontra apenas uma tela compatível.
 
 ## Atualizações
 
@@ -52,7 +55,7 @@ O workflow `CI` compila no Windows e verifica o pacote portátil. **Publicar rel
 
 ## Dados locais e assinatura
 
-Na instalação padrão, os dados ficam em `%LOCALAPPDATA%\Controlador35`; a desinstalação não remove essa pasta. No modo portátil, os dados ficam em `data` junto ao executável. O aplicativo não configura inicialização automática com o Windows.
+Na instalação padrão, os dados ficam em `%LOCALAPPDATA%\Controlador35`; a desinstalação não remove essa pasta. No modo portátil, os dados ficam em `data` junto ao executável. A opção de inicialização vale para o usuário atual do Windows; na versão portátil, desative e ative novamente depois de mover a pasta do aplicativo.
 
 Os executáveis publicados não têm assinatura Authenticode. O certificado autoassinado de desenvolvimento não é usado na release e não torna os arquivos confiáveis nos computadores de outras pessoas. Por isso, o Smart App Control pode bloquear o instalador ou o aplicativo até que haja uma assinatura de um emissor confiável ou reputação suficiente.
 

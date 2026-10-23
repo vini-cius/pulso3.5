@@ -14,6 +14,7 @@ using System.IO;
 using System.IO.Ports;
 using System.Linq;
 using System.Management;
+using Microsoft.Win32;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -21,6 +22,29 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace Controlador35 {
+    public static class StartupManager {
+        const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+        const string ValueName = "Pulso35";
+        public static string CommandFor(string executablePath) { return "\"" + executablePath + "\" --startup"; }
+        public static bool IsEnabled() {
+            try {
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(RunKey, false)) {
+                    if (key == null) return false;
+                    object value = key.GetValue(ValueName, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
+                    return value != null && !String.IsNullOrWhiteSpace(Convert.ToString(value));
+                }
+            } catch (UnauthorizedAccessException) { return false; }
+            catch (System.Security.SecurityException) { return false; }
+            catch (IOException) { return false; }
+        }
+        public static void SetEnabled(bool enabled) {
+            using (RegistryKey key = Registry.CurrentUser.CreateSubKey(RunKey)) {
+                if (key == null) throw new IOException("Não foi possível acessar as opções de inicialização do Windows.");
+                if (enabled) key.SetValue(ValueName, CommandFor(Application.ExecutablePath), RegistryValueKind.String);
+                else key.DeleteValue(ValueName, false);
+            }
+        }
+    }
     public static class Paths {
         public static readonly string Root = AppDomain.CurrentDomain.BaseDirectory;
         public static readonly bool IsPortable = File.Exists(Path.Combine(Root, "portable.flag"));
@@ -96,6 +120,23 @@ namespace Controlador35 {
                     return pixels;
                 } finally { bmp.UnlockBits(bits); }
             }
+        }
+        public static Rectangle ChangedBounds(byte[] current, byte[] previous, int width, int height) {
+            if (width <= 0 || height <= 0 || current == null || current.Length != width * height * 2)
+                throw new ArgumentException("Pixels RGB565 e dimensões incompatíveis.");
+            if (previous == null) return new Rectangle(0, 0, width, height);
+            if (previous.Length != current.Length) throw new ArgumentException("Quadros RGB565 com tamanhos diferentes.");
+            int left = width, top = height, right = -1, bottom = -1;
+            for (int y = 0, offset = 0; y < height; y++) {
+                for (int x = 0; x < width; x++, offset += 2) {
+                    if (current[offset] == previous[offset] && current[offset + 1] == previous[offset + 1]) continue;
+                    if (x < left) left = x;
+                    if (x > right) right = x;
+                    if (y < top) top = y;
+                    if (y > bottom) bottom = y;
+                }
+            }
+            return right < left ? Rectangle.Empty : Rectangle.FromLTRB(left, top, right + 1, bottom + 1);
         }
     }
     public sealed class Measurement {
@@ -222,22 +263,29 @@ namespace Controlador35 {
         readonly TextBox city = new TextBox { Text = "Mauá" };
         readonly ComboBox places = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
         readonly CheckBox invert = new CheckBox { Text = "Girar tela em 180°", AutoSize = true, Checked = true };
+        readonly CheckBox startup = new CheckBox { Text = "Iniciar com o Windows", AutoSize = true, Checked = StartupManager.IsEnabled() };
+        readonly CheckBox gamerMode = new CheckBox { Text = "Modo gamer auto", AutoSize = true };
+        readonly ToolStripMenuItem startupMenuItem = new ToolStripMenuItem("Iniciar com o Windows") { CheckOnClick = true };
         readonly Label status = new Label(), timing = new Label(), climateStatus = new Label(),caption = new Label();
         readonly PictureBox preview = new PictureBox { SizeMode = PictureBoxSizeMode.Zoom };
         readonly System.Windows.Forms.Timer previewTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+        readonly System.Windows.Forms.Timer startupRetryTimer = new System.Windows.Forms.Timer { Interval = 5000 };
         readonly CancellationTokenSource services = new CancellationTokenSource();
         readonly NotifyIcon trayIcon = new NotifyIcon { Icon = SystemIcons.Application, Text = "Pulso 3.5 — painel USB", Visible = true };
         readonly ContextMenuStrip trayMenu = new ContextMenuStrip();
         volatile Metrics latest = new Metrics();
+        volatile GamerTelemetry latestGame=GamerTelemetry.Inactive("Aguardando RTSS ou MSI Afterburner",false);
         volatile Weather weather = new Weather();
         volatile ThemeConfig theme = ThemeStore.Load();
         volatile Place place = Climate.Load();
-        Task sensorsTask, weatherTask, running;
+        Task sensorsTask, weatherTask, gamerTask, running;
         CancellationTokenSource cancel;
         volatile bool fullRequested;
-        bool closing, rendering, shuttingDown, exitRequested, trayNoticeShown, checkingUpdate;
-        public ControllerForm(bool auto) {
+        volatile bool gamerModeEnabled;
+        bool closing, rendering, shuttingDown, exitRequested, trayNoticeShown, checkingUpdate, syncingStartupUi, startupRetryPending;
+        public ControllerForm(bool auto, bool startInTray) {
             rendering=Environment.GetCommandLineArgs().Contains("--render-ui");
+            gamerModeEnabled=GamerModePreferences.LoadEnabled();gamerMode.Checked=gamerModeEnabled;
             trayIcon.Visible=!rendering;
             weather = new Weather { City = place.Name + ", " + place.Region };
             Text = "Pulso 3.5 — Painel open source para telas USB"; BackColor = Color.FromArgb(238,242,246);
@@ -251,22 +299,39 @@ namespace Controlador35 {
             devices.SetBounds(368,119,285,32); refresh.SetBounds(665,118,175,32);
             connect.SetBounds(368,164,285,40); stop.SetBounds(665,164,175,40);
             invert.SetBounds(369,219,265,28); resend.SetBounds(665,215,175,36);
-            var cityLabel = new Label { Text = "Clima • cidade" }; cityLabel.SetBounds(368,268,450,24);
-            editTheme.SetBounds(368,260,472,34);
-            cityLabel.SetBounds(368,307,450,24);
-            city.SetBounds(368,335,285,30); search.SetBounds(665,334,175,32);
-            places.SetBounds(368,376,285,32); apply.SetBounds(665,375,175,32);
+            startup.SetBounds(369,247,265,26);
+            gamerMode.SetBounds(665,247,175,26);
+            var cityLabel = new Label { Text = "Clima • cidade" };
+            editTheme.SetBounds(368,278,472,34);
+            cityLabel.SetBounds(368,321,450,24);
+            city.SetBounds(368,349,285,30); search.SetBounds(665,348,175,32);
+            places.SetBounds(368,390,285,32); apply.SetBounds(665,389,175,32);
             places.Items.Add(place); places.SelectedIndex = 0; city.Text = place.Name;
-            climateStatus.SetBounds(368,416,472,40); climateStatus.Text = "Clima: " + place;
-            status.SetBounds(368,465,472,57); timing.SetBounds(368,529,472,73);
+            climateStatus.SetBounds(368,430,472,40); climateStatus.Text = "Clima: " + place;
+            status.SetBounds(368,479,472,57); timing.SetBounds(368,543,472,73);
             status.Text = "Prévia ao vivo. Conecte para mostrar na tela USB.";
             caption.Text = Panel.Width(theme)+" × "+Panel.Height(theme)+" • relógio a cada 1 s\nIndicadores a cada 2 s • clima a cada 10 min\nTemperaturas: LibreHardwareMonitor com WMI";
-            caption.ForeColor=Color.FromArgb(70,84,100);caption.SetBounds(23,520,325,76);
-            Controls.AddRange(new Control[] { preview,title,subtitle,devices,refresh,connect,stop,invert,resend,editTheme,updates,cityLabel,city,search,places,apply,climateStatus,status,timing,caption });
+            caption.ForeColor=Color.FromArgb(70,84,100);caption.SetBounds(23,520,325,76);RefreshCaption();
+            Controls.AddRange(new Control[] { preview,title,subtitle,devices,refresh,connect,stop,invert,startup,gamerMode,resend,editTheme,updates,cityLabel,city,search,places,apply,climateStatus,status,timing,caption });
             trayMenu.Items.Add("Abrir Pulso 3.5",null,delegate { RestoreFromTray(); });
+            trayMenu.Items.Add(startupMenuItem);
+            trayMenu.Items.Add(new ToolStripSeparator());
             trayMenu.Items.Add("Sair e parar a tela",null,delegate { exitRequested=true; Close(); });
             trayIcon.ContextMenuStrip=trayMenu;
             trayIcon.DoubleClick+=delegate { RestoreFromTray(); };
+            startup.CheckedChanged+=delegate { if(!syncingStartupUi) SetStartupPreference(startup.Checked); };
+            gamerMode.CheckedChanged+=delegate {
+                bool enabled=gamerMode.Checked;
+                try { GamerModePreferences.SaveEnabled(enabled); }
+                catch(Exception ex) { gamerMode.Checked=gamerModeEnabled;status.Text="Não foi possível salvar o modo gamer: "+ex.Message;return; }
+                gamerModeEnabled=enabled;
+                latestGame=enabled?GamerTelemetry.Inactive("Aguardando RTSS ou MSI Afterburner",false):GamerTelemetry.Disabled();
+                Metrics current=latest;if(current!=null)current.Gamer=latestGame;
+                fullRequested=true;RefreshCaption();
+            };
+            startupMenuItem.CheckedChanged+=delegate { if(!syncingStartupUi) SetStartupPreference(startupMenuItem.Checked); };
+            trayMenu.Opening+=delegate { SyncStartupControls(StartupManager.IsEnabled()); };
+            startupRetryTimer.Tick+=delegate { TryStartupAutoConnect(); };
             Resize+=delegate { if(WindowState==FormWindowState.Minimized) HideToTray(); };
             updates.Click+=async delegate { await CheckForUpdates(); };
             connect.Click += delegate { Start(); }; stop.Click += delegate { Stop(); };
@@ -293,12 +358,46 @@ namespace Controlador35 {
                     place = new Place { Name = selected.Name, Region = selected.Region, Country = selected.Country, Latitude = selected.Latitude, Longitude = selected.Longitude }; climateStatus.Text = "Cidade salva: " + selected; }
                 catch (Exception ex) { climateStatus.Text = "Não foi possível salvar: " + ex.Message; }
             };
-            previewTimer.Tick += delegate { SetPreview(Panel.Render(DateTime.Now,latest,weather,theme)); };
+            previewTimer.Tick += delegate { SetPreview(Panel.Render(DateTime.Now,latest,weather,theme));RefreshCaption(); };
             Shown += delegate {
                 Scan(); SetPreview(Panel.Render(DateTime.Now,latest,weather,theme));
-                if (!rendering) { StartServices(); previewTimer.Start(); if (auto && devices.Items.Count == 1) Start(); }
+                if (!rendering) {
+                    StartServices(); previewTimer.Start();
+                    if (startInTray) {
+                        startupRetryPending=true; HideToTray(); TryStartupAutoConnect(); startupRetryTimer.Start();
+                    } else if (auto && devices.Items.Count == 1) Start();
+                }
             };
             FormClosing += OnClosing;
+        }
+        void TryStartupAutoConnect() {
+            if(!startupRetryPending || shuttingDown || rendering || !connect.Enabled) return;
+            Scan();
+            if(devices.Items.Count==1) Start();
+        }
+        void SyncStartupControls(bool enabled) {
+            syncingStartupUi=true;
+            try { startup.Checked=enabled; startupMenuItem.Checked=enabled; }
+            finally { syncingStartupUi=false; }
+        }
+        void RefreshCaption() {
+            string gameName=latestGame==null?"":latestGame.GameName??"";
+            if(gameName.Length>22)gameName=gameName.Substring(0,21)+"…";
+            string mode=!gamerModeEnabled?"Modo gamer desativado":latestGame==null?"Aguardando leitura do jogo":latestGame.Active?
+                "Jogo: "+gameName+(latestGame.Fps.HasValue?" • "+latestGame.Fps.Value.ToString("0",CultureInfo.InvariantCulture)+" FPS":""):
+                latestGame.SourceDetected?"Aguardando jogo no RTSS/Afterburner":"RTSS/Afterburner não detectados";
+            caption.Text=Panel.Width(theme)+" × "+Panel.Height(theme)+" • relógio a cada 1 s\nIndicadores a cada 2 s • clima a cada 10 min\nTemperaturas: LibreHardwareMonitor com WMI\n"+mode;
+        }
+        void SetStartupPreference(bool enabled) {
+            try {
+                StartupManager.SetEnabled(enabled);
+                SyncStartupControls(enabled);
+                status.Text=enabled?"O Pulso será iniciado com o Windows e ficará na bandeja.":"A inicialização automática foi desativada.";
+            } catch(Exception ex) {
+                bool current=false; try { current=StartupManager.IsEnabled(); } catch { }
+                SyncStartupControls(current);
+                MessageBox.Show(this,"Não foi possível alterar a inicialização automática: "+ex.Message,"Pulso 3.5",MessageBoxButtons.OK,MessageBoxIcon.Error);
+            }
         }
         void HideToTray() {
             if(WindowState==FormWindowState.Minimized) WindowState=FormWindowState.Normal;
@@ -338,9 +437,23 @@ namespace Controlador35 {
             sensorsTask = Task.Run(delegate {
                 var sensors = new Sensors();
                 while (!token.IsCancellationRequested) {
-                    try { latest = sensors.Read(); }
+                    try { Metrics sample=sensors.Read();sample.Gamer=latestGame;latest=sample; }
                     catch (Exception ex) { Paths.Log("SENSORS " + ex.Message); }
                     token.WaitHandle.WaitOne(2000);
+                }
+            });
+            gamerTask = Task.Run(delegate {
+                var reader=new GamerModeReader();
+                while(!token.IsCancellationRequested) {
+                    try {
+                        GamerTelemetry sample=gamerModeEnabled?reader.ReadForeground():GamerTelemetry.Disabled();
+                        latestGame=sample;Metrics current=latest;if(current!=null)current.Gamer=sample;
+                    } catch(Exception ex) {
+                        Paths.Log("GAMER " + ex.Message);
+                        GamerTelemetry sample=GamerTelemetry.Inactive("Leitura de FPS indisponível",false);
+                        latestGame=sample;Metrics current=latest;if(current!=null)current.Gamer=sample;
+                    }
+                    token.WaitHandle.WaitOne(250);
                 }
             });
             weatherTask = Task.Run(delegate {
@@ -386,7 +499,7 @@ namespace Controlador35 {
                         link.Open(selected,rotation,landscape); fullRequested=true;
                         int width=landscape?480:320,height=landscape?320:480;var bands=Panel.BandsFor(width,height);
                         byte[][] previous = new byte[bands.Length][];
-                        Ui(delegate { status.Text="Conectado à " + selected.Port + ". " + link.Model; });
+                        Ui(delegate { status.Text="Conectado à " + selected.Port + ". " + link.Model; startupRetryPending=false; startupRetryTimer.Stop(); });
                         while(!token.IsCancellationRequested) {
                             var tick=Stopwatch.StartNew(); int bytes=0, regions=0; double elapsed=0;
                             using(var image=Panel.Render(DateTime.Now,latest,weather,theme)) {
@@ -399,10 +512,14 @@ namespace Controlador35 {
                                     var area=bands[i];
                                     using(var band=image.Clone(area,PixelFormat.Format24bppRgb)) {
                                         byte[] pixels=Protocol.Pixels(band);
-                                        if(!full && (previous[i]==null || !pixels.SequenceEqual(previous[i]))) {
+                                        Rectangle changed=Protocol.ChangedBounds(pixels,previous[i],area.Width,area.Height);
+                                        if(!full && !changed.IsEmpty) {
                                             if(token.IsCancellationRequested) break;
-                                            var measurement=link.Send(band,area,"Painel parcial");
-                                            bytes+=measurement.Bytes; elapsed+=measurement.Milliseconds; regions++;
+                                            var updateArea=new Rectangle(area.X+changed.X,area.Y+changed.Y,changed.Width,changed.Height);
+                                            using(var update=image.Clone(updateArea,PixelFormat.Format24bppRgb)) {
+                                                var measurement=link.Send(update,updateArea,"Painel parcial");
+                                                bytes+=measurement.Bytes; elapsed+=measurement.Milliseconds; regions++;
+                                            }
                                         }
                                         previous[i]=pixels;
                                     }
@@ -425,21 +542,76 @@ namespace Controlador35 {
         async void OnClosing(object sender,FormClosingEventArgs e) {
             if(closing) return;
             if(!exitRequested && e.CloseReason==CloseReason.UserClosing) { e.Cancel=true; HideToTray(); return; }
-            e.Cancel=true; if(shuttingDown) return; shuttingDown=true; previewTimer.Stop(); services.Cancel(); Stop(); Enabled=false;
+            e.Cancel=true; if(shuttingDown) return; shuttingDown=true; previewTimer.Stop(); startupRetryTimer.Stop(); services.Cancel(); Stop(); Enabled=false;
             if(running!=null) await running;
-            var background = Task.WhenAll(new Task[] { sensorsTask,weatherTask }.Where(task => task != null));
+            var background = Task.WhenAll(new Task[] { sensorsTask,weatherTask,gamerTask }.Where(task => task != null));
             await Task.WhenAny(background,Task.Delay(1500));
             if(background.IsCompleted) services.Dispose();
             else DisposeAfterServices(background);
             closing=true; if(preview.Image!=null) { preview.Image.Dispose(); preview.Image=null; }
-            previewTimer.Dispose(); trayIcon.Visible=false; trayIcon.Dispose(); trayMenu.Dispose(); Close();
+            previewTimer.Dispose(); startupRetryTimer.Dispose(); trayIcon.Visible=false; trayIcon.Dispose(); trayMenu.Dispose(); Close();
         }
     }
     public static class Program {
         static void Equal(byte[] actual, params byte[] expected) {
             if (!actual.SequenceEqual(expected)) throw new Exception("Teste falhou: " + BitConverter.ToString(actual));
         }
+        static void PutUInt32(byte[] data,int offset,uint value) { Buffer.BlockCopy(BitConverter.GetBytes(value),0,data,offset,4); }
+        static void PutSingle(byte[] data,int offset,float value) { Buffer.BlockCopy(BitConverter.GetBytes(value),0,data,offset,4); }
+        static void TestGamerTelemetry() {
+            const uint processId=4242;
+            var rtss=new byte[64+316];
+            PutUInt32(rtss,0,0x52545353);PutUInt32(rtss,4,0x00020014);
+            PutUInt32(rtss,8,316);PutUInt32(rtss,12,64);PutUInt32(rtss,16,1);
+            PutUInt32(rtss,64,processId);PutUInt32(rtss,64+280,16667);
+            GamerTelemetry sample=GamerTelemetryParser.ParseRtss(rtss,processId,"GameSample");
+            if(!sample.Active||sample.Source!="RTSS"||!sample.Fps.HasValue||Math.Abs(sample.Fps.Value-60)>0.1||
+                !sample.FrameTimeMs.HasValue||Math.Abs(sample.FrameTimeMs.Value-16.667)>0.01)
+                throw new Exception("A leitura simulada de FPS/frame time do RTSS falhou.");
+            if(GamerTelemetryParser.ParseRtss(rtss,processId+1,"Other").Active)
+                throw new Exception("O RTSS foi associado a um processo que não está em primeiro plano.");
+
+            const int headerSize=32,entrySize=1324;
+            var afterburner=new byte[headerSize+entrySize*4];
+            PutUInt32(afterburner,0,0x4D41484D);PutUInt32(afterburner,4,0x00020000);
+            PutUInt32(afterburner,8,headerSize);PutUInt32(afterburner,12,4);PutUInt32(afterburner,16,entrySize);
+            int[] ids={0x50,0x51,0x53,0x55};float[] values={144.0f,6.9f,138.0f,96.0f};
+            for(int i=0;i<ids.Length;i++) {
+                int entry=headerSize+i*entrySize;
+                PutSingle(afterburner,entry+1300,values[i]);PutUInt32(afterburner,entry+1316,0xFFFFFFFF);
+                PutUInt32(afterburner,entry+1320,(uint)ids[i]);
+            }
+            GamerTelemetry fromAfterburner=GamerTelemetryParser.ParseAfterburner(afterburner,processId,"GameSample");
+            if(!fromAfterburner.Active||fromAfterburner.Source!="MSI Afterburner"||
+                fromAfterburner.Fps!=144||!fromAfterburner.FrameTimeMs.HasValue||Math.Abs(fromAfterburner.FrameTimeMs.Value-6.9)>0.01||
+                fromAfterburner.AverageFps!=138||fromAfterburner.OnePercentLowFps!=96)
+                throw new Exception("A leitura simulada de métricas do Afterburner falhou.");
+            PutUInt32(rtss,8,0xFFFFFFFF);
+            if(GamerTelemetryParser.ParseRtss(rtss,processId,"GameSample").Active)
+                throw new Exception("Uma tabela RTSS com tamanho inválido foi aceita.");
+            ThemeConfig oldTheme=new ThemeConfig();
+            oldTheme.Portrait.Widgets.RemoveAll(item=>item.Type=="Game");
+            oldTheme.Landscape.Widgets.RemoveAll(item=>item.Type=="Game");
+            ThemeDefaults.Ensure(oldTheme,false);
+            if(oldTheme.Portrait.Widgets.Count(item=>item.Type=="Game")!=1||oldTheme.Landscape.Widgets.Count(item=>item.Type=="Game")!=1)
+                throw new Exception("A atualização não adicionou o painel gamer aos temas anteriores.");
+            oldTheme.Portrait.Widgets.RemoveAll(item=>item.Type=="Game");
+            ThemeDefaults.Ensure(oldTheme,false);
+            if(oldTheme.Portrait.Widgets.Any(item=>item.Type=="Game"))
+                throw new Exception("A atualização recriou um painel gamer excluído pelo usuário.");
+            DateTime now=DateTime.Now;
+            var idleMetrics=new Metrics { At=now };
+            var playingMetrics=new Metrics {
+                At=now,Gamer=new GamerTelemetry { Active=true,GameName="GameSample",Fps=60,FrameTimeMs=16.7,At=now }
+            };
+            using(Bitmap idle=Panel.Render(now,idleMetrics,new Weather(),new ThemeConfig()))
+            using(Bitmap playing=Panel.Render(now,playingMetrics,new Weather(),new ThemeConfig()))
+                if(Protocol.ChangedBounds(Protocol.Pixels(playing),Protocol.Pixels(idle),320,480).IsEmpty)
+                    throw new Exception("O painel gamer não apareceu quando há um jogo em foco.");
+        }
         static void SelfTest() {
+            string startupCommand=StartupManager.CommandFor(@"C:\Program Files\Pulso 3.5\Pulso35.exe");
+            if(startupCommand!="\"C:\\Program Files\\Pulso 3.5\\Pulso35.exe\" --startup") throw new Exception("O comando de inicialização não preserva o caminho do aplicativo.");
             Equal(Protocol.RegionHeader(new Rectangle(0, 0, 320, 480)), 0, 0, 4, 253, 223, 197);
             Equal(Protocol.RegionHeader(new Rectangle(16, 282, 288, 96)), 4, 17, 164, 189, 121, 197);
             Equal(Protocol.RegionHeader(new Rectangle(319, 479, 1, 1)), 79, 221, 244, 253, 223, 197);
@@ -449,19 +621,35 @@ namespace Controlador35 {
                 byte[] row = { 0, 248, 224, 7, 31, 0, 255, 255, 0, 0, 255, 7, 31, 248 };
                 Equal(Protocol.Pixels(colors), row.Concat(row).ToArray());
             }
+            byte[] before = new byte[10 * 8 * 2], after = (byte[])before.Clone();
+            after[(3 * 10 + 2) * 2] = 1; after[(5 * 10 + 7) * 2 + 1] = 1;
+            if (Protocol.ChangedBounds(after,before,10,8) != new Rectangle(2,3,6,3))
+                throw new Exception("A região mínima alterada não corresponde aos pixels modificados.");
+            if (Protocol.ChangedBounds(before,(byte[])before.Clone(),10,8) != Rectangle.Empty)
+                throw new Exception("Quadros iguais geraram uma região de atualização.");
+            if (Protocol.ChangedBounds(after,null,10,8) != new Rectangle(0,0,10,8))
+                throw new Exception("O primeiro quadro deve atualizar a área completa.");
+            using (var clockBefore = Pattern.Clock(new DateTime(2026,10,22,20,34,56)))
+            using (var clockAfter = Pattern.Clock(new DateTime(2026,10,22,20,34,57))) {
+                Rectangle clockChange = Protocol.ChangedBounds(Protocol.Pixels(clockAfter),Protocol.Pixels(clockBefore),288,96);
+                if (clockChange.IsEmpty || (long)clockChange.Width*clockChange.Height >= 288*96)
+                    throw new Exception("A mudança de segundos não foi reduzida a uma região menor que a faixa do relógio.");
+                Protocol.RegionHeader(new Rectangle(16+clockChange.X,282+clockChange.Y,clockChange.Width,clockChange.Height),320,480);
+            }
             bool rejected = false;
             try { Protocol.RegionHeader(new Rectangle(319, 479, 2, 1)); } catch (ArgumentOutOfRangeException) { rejected = true; }
             if (!rejected) throw new Exception("Região fora da tela foi aceita.");
             rejected = false;
             try { Protocol.RegionHeader(new Rectangle(0, 0, 0, 1)); } catch (ArgumentOutOfRangeException) { rejected = true; }
             if (!rejected) throw new Exception("Região vazia foi aceita.");
+            TestGamerTelemetry();
             using (var image = Pattern.Full(new DateTime(2026, 10, 22, 12, 34, 56))) {
                 if (Protocol.Pixels(image).Length != 307200) throw new Exception("Tamanho de quadro inválido.");
                 image.Save(Paths.UserFile("imagem-teste.png"), ImageFormat.Png);
             }
             Equal(Protocol.Orientation(false), 0, 0, 0, 0, 0, 121, 100, 1, 64, 1, 224, 0, 0, 0, 0, 0);
             Equal(Protocol.Orientation(true), 0, 0, 0, 0, 0, 121, 101, 1, 64, 1, 224, 0, 0, 0, 0, 0);
-            Paths.Log("SELFTEST PASS: headers, boundary validation, RGB565 colors/stride, image length and orientation.");
+            Paths.Log("SELFTEST PASS: headers, serial regions, RGB565, orientation, RTSS/Afterburner parsers.");
             Console.WriteLine("SELFTEST PASS");
         }
         static int Probe(int seconds, string port) {
@@ -510,7 +698,7 @@ namespace Controlador35 {
                 }
                 if (args.Contains("--render-ui")) {
                     Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
-                    using (var form = new ControllerForm(false)) form.SaveUiPreview();
+                    using (var form = new ControllerForm(false,false)) form.SaveUiPreview();
                     return 0;
                 }
                 bool created;
@@ -527,7 +715,8 @@ namespace Controlador35 {
                             return Probe(seconds, port);
                         }
                         Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
-                        Application.Run(new ControllerForm(args.Contains("--connect"))); return 0;
+                        bool startup=args.Contains("--startup");
+                        Application.Run(new ControllerForm(args.Contains("--connect") || startup,startup)); return 0;
                     } finally { mutex.ReleaseMutex(); }
                 }
             } catch (Exception ex) {
