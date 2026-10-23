@@ -28,15 +28,17 @@ Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortugue
 [Tasks]
 Name: "desktopicon"; Description: "Criar atalho na área de trabalho"; GroupDescription: "Atalhos:"; Flags: unchecked
 
+[InstallDelete]
+Type: files; Name: "{app}\Pulso35-Diagnostico.exe"
+Type: files; Name: "{group}\Diagnóstico da tela.lnk"
+
 [Files]
 Source: "dist\app\Pulso35.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "dist\app\Pulso35-Diagnostico.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "dist\app\versao.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\Pulso 3.5"; Filename: "{app}\Pulso35.exe"
 Name: "{autodesktop}\Pulso 3.5"; Filename: "{app}\Pulso35.exe"; Tasks: desktopicon
-Name: "{group}\Diagnóstico da tela"; Filename: "{app}\Pulso35-Diagnostico.exe"
 
 [Run]
 Filename: "{app}\Pulso35.exe"; Description: "Abrir Pulso 3.5"; Flags: nowait postinstall skipifsilent

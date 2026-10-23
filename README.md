@@ -43,17 +43,9 @@ Requisitos: PowerShell, compilador do .NET Framework instalado pelo Windows e In
 .\Preparar-Atualizacao.ps1 -Notas "Descrição da versão"
 ```
 
-Os executáveis de compilação ficam em `dist\app`. A atualização fica em `dist\atualizacao`; publique `latest.json` e o ZIP juntos em HTTPS. O workflow de release recebe a URL absoluta do pacote do próprio GitHub. Os scripts também aceitam `-SkipBuild` para reaproveitar a compilação atual.
+O aplicativo compilado fica em `dist\app`. A atualização fica em `dist\atualizacao`; publique `latest.json` e o ZIP juntos em HTTPS. O workflow de release recebe a URL absoluta do pacote do próprio GitHub. Os scripts também aceitam `-SkipBuild` para reaproveitar a compilação atual.
 
 O workflow `CI` compila em Windows para alterações e pull requests. `Publicar release` é executado para tags `v*`, monta o instalador com Inno Setup e publica os artefatos. Nenhum segredo de publicação é necessário: o workflow usa o `GITHUB_TOKEN` com acesso de escrita somente a releases.
-
-Para validar apenas o protocolo e a conversão RGB565, a versão de diagnóstico suporta:
-
-```powershell
-.\dist\app\Pulso35-Diagnostico.exe --self-test
-```
-
-O comando `--probe` envia conteúdo para a tela física e deve ser usado somente de propósito, com o controlador fechado.
 
 ## Preferências e dados locais
 

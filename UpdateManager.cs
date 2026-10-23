@@ -107,7 +107,7 @@ namespace Controlador35 {
                 foreach (ZipArchiveEntry entry in archive.Entries) {
                     string name = entry.FullName;
                     if (name.IndexOf('/') >= 0 || name.IndexOf('\\') >= 0 ||
-                        (name != "Pulso35.exe" && name != "Pulso35-Diagnostico.exe" && name != "versao.txt"))
+                        (name != "Pulso35.exe" && name != "versao.txt"))
                         throw new InvalidDataException("O pacote contém um arquivo não permitido: " + name);
                     if (files.ContainsKey(name)) throw new InvalidDataException("O pacote contém arquivos duplicados.");
                     if (entry.Length > MaxPackageBytes) throw new InvalidDataException("Um arquivo do pacote é grande demais.");
@@ -170,6 +170,7 @@ namespace Controlador35 {
                         File.Copy(Path.Combine(stage, pair.Key), destination, true); changed.Add(pair.Key);
                     }
                     Process.Start(new ProcessStartInfo { FileName = expectedExe, WorkingDirectory = appDirectory, UseShellExecute = true });
+                    RemoveLegacyDiagnostic(appDirectory);
                     try { Directory.Delete(stage, true); Directory.Delete(backup, true); File.Delete(packagePath); } catch { }
                     return 0;
                 } catch {
@@ -199,6 +200,15 @@ namespace Controlador35 {
                     if (!process.WaitForExit(90000)) throw new TimeoutException("O controlador ainda está encerrando. A atualização foi cancelada.");
                 }
             } catch (ArgumentException) { }
+        }
+
+        static void RemoveLegacyDiagnostic(string appDirectory) {
+            try { File.Delete(Path.Combine(appDirectory, "Pulso35-Diagnostico.exe")); } catch { }
+            try {
+                string shortcut = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs),
+                    "Pulso 3.5", "Diagnóstico da tela.lnk");
+                File.Delete(shortcut);
+            } catch { }
         }
 
     }
