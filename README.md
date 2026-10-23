@@ -35,7 +35,7 @@ Para criar uma release, publique uma tag `vMAJOR.MINOR.PATCH`, por exemplo `v1.0
 
 ## Compilar no Windows
 
-Requisitos: PowerShell, compilador do .NET Framework instalado pelo Windows e Inno Setup 6 ou 7 para gerar o instalador.
+Requisitos: PowerShell e compilador do .NET Framework instalado pelo Windows. Se o Inno Setup 6 ou 7 não estiver instalado, `Preparar-Instalador.ps1` baixa o compilador oficial, valida a assinatura digital e o usa em uma pasta temporária.
 
 ```powershell
 .\Compilar.ps1
