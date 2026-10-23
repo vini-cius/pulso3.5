@@ -25,8 +25,13 @@ namespace Controlador35 {
     public static class StartupManager {
         const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
         const string ValueName = "Pulso35";
+        const string StartupTaskId = "Pulso35Startup";
         public static string CommandFor(string executablePath) { return "\"" + executablePath + "\" --startup"; }
         public static bool IsEnabled() {
+            if (Paths.IsMsix) {
+                try { return GetPackagedTask().State == Windows.ApplicationModel.StartupTaskState.Enabled; }
+                catch { return false; }
+            }
             try {
                 using (RegistryKey key = Registry.CurrentUser.OpenSubKey(RunKey, false)) {
                     if (key == null) return false;
@@ -38,20 +43,47 @@ namespace Controlador35 {
             catch (IOException) { return false; }
         }
         public static void SetEnabled(bool enabled) {
+            if (Paths.IsMsix) throw new InvalidOperationException("Use SetEnabledAsync para alterar a inicialização da instalação MSIX.");
             using (RegistryKey key = Registry.CurrentUser.CreateSubKey(RunKey)) {
                 if (key == null) throw new IOException("Não foi possível acessar as opções de inicialização do Windows.");
                 if (enabled) key.SetValue(ValueName, CommandFor(Application.ExecutablePath), RegistryValueKind.String);
                 else key.DeleteValue(ValueName, false);
             }
         }
+        static Windows.ApplicationModel.StartupTask GetPackagedTask() {
+            return Windows.ApplicationModel.StartupTask.GetAsync(StartupTaskId).AsTask().GetAwaiter().GetResult();
+        }
+        public static async Task<bool> SetEnabledAsync(bool enabled) {
+            if (!Paths.IsMsix) { SetEnabled(enabled); return IsEnabled(); }
+            Windows.ApplicationModel.StartupTask task = await Windows.ApplicationModel.StartupTask.GetAsync(StartupTaskId);
+            if (enabled) {
+                Windows.ApplicationModel.StartupTaskState state = await task.RequestEnableAsync();
+                if (state != Windows.ApplicationModel.StartupTaskState.Enabled) {
+                    if (state == Windows.ApplicationModel.StartupTaskState.DisabledByUser)
+                        throw new InvalidOperationException("A inicialização foi desativada no Windows. Reative Pulso 3.5 em Configurações > Aplicativos > Inicialização.");
+                    throw new InvalidOperationException("O Windows não permitiu ativar a inicialização automática.");
+                }
+            } else task.Disable();
+            return task.State == Windows.ApplicationModel.StartupTaskState.Enabled;
+        }
     }
     public static class Paths {
         public static readonly string Root = AppDomain.CurrentDomain.BaseDirectory;
         public static readonly bool IsPortable = File.Exists(Path.Combine(Root, "portable.flag"));
+        public static readonly bool IsMsix = HasPackageIdentity();
         public static readonly string UserData = IsPortable
             ? Path.Combine(Root, "data")
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Controlador35");
         public static readonly string Logs = Path.Combine(UserData, "logs");
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+        static extern int GetCurrentPackageFullName(ref uint packageFullNameLength, StringBuilder packageFullName);
+        static bool HasPackageIdentity() {
+            try {
+                uint length = 0;
+                int result = GetCurrentPackageFullName(ref length, null);
+                return result == 0 || result == 122;
+            } catch { return false; }
+        }
         public static string UserFile(string name) { Directory.CreateDirectory(UserData); return Path.Combine(UserData,name); }
         public static void Log(string text) {
             Directory.CreateDirectory(Logs);
@@ -388,17 +420,19 @@ namespace Controlador35 {
                 latestGame.SourceDetected?"Aguardando jogo no RTSS/Afterburner":"RTSS/Afterburner não detectados";
             caption.Text=Panel.Width(theme)+" × "+Panel.Height(theme)+" • relógio a cada 1 s\nIndicadores a cada 2 s • clima a cada 10 min\nTemperaturas: LibreHardwareMonitor com WMI\n"+mode;
         }
-        void SetStartupPreference(bool enabled) {
+        async void SetStartupPreference(bool enabled) {
+            if(syncingStartupUi) return;
             try {
-                StartupManager.SetEnabled(enabled);
-                SyncStartupControls(enabled);
-                status.Text=enabled?"O Pulso será iniciado com o Windows e ficará na bandeja.":"A inicialização automática foi desativada.";
+                bool current = Paths.IsMsix ? await StartupManager.SetEnabledAsync(enabled) : SetUnpackagedStartup(enabled);
+                SyncStartupControls(current);
+                status.Text=current?"O Pulso será iniciado com o Windows e ficará na bandeja.":"A inicialização automática foi desativada.";
             } catch(Exception ex) {
                 bool current=false; try { current=StartupManager.IsEnabled(); } catch { }
                 SyncStartupControls(current);
                 MessageBox.Show(this,"Não foi possível alterar a inicialização automática: "+ex.Message,"Pulso 3.5",MessageBoxButtons.OK,MessageBoxIcon.Error);
             }
         }
+        static bool SetUnpackagedStartup(bool enabled) { StartupManager.SetEnabled(enabled); return StartupManager.IsEnabled(); }
         void HideToTray() {
             if(WindowState==FormWindowState.Minimized) WindowState=FormWindowState.Normal;
             ShowInTaskbar=false; Hide();
@@ -412,6 +446,15 @@ namespace Controlador35 {
         }
         async Task CheckForUpdates() {
             if(checkingUpdate || shuttingDown) return;
+            if(Paths.IsMsix) {
+                const string releases = "https://github.com/vini-cius/pulso3.5/releases/latest";
+                const string message = "O Windows gerencia as atualizações desta instalação. Ele verifica novas versões automaticamente.\n\nPara atualizar agora, abra a página de Releases, baixe Pulso35.appinstaller e abra o arquivo.";
+                if(MessageBox.Show(this,message,"Atualizações do Pulso 3.5",MessageBoxButtons.YesNo,MessageBoxIcon.Information)==DialogResult.Yes) {
+                    try { Process.Start(new ProcessStartInfo { FileName=releases, UseShellExecute=true }); }
+                    catch(Exception ex) { MessageBox.Show(this,ex.Message,"Não foi possível abrir o GitHub",MessageBoxButtons.OK,MessageBoxIcon.Error); }
+                }
+                return;
+            }
             checkingUpdate=true; updates.Enabled=false; status.Text="Verificando atualizações…";
             try {
                 UpdateRelease release=await Task.Run(()=>UpdateManager.CheckLatest());

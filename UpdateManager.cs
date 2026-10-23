@@ -65,6 +65,7 @@ namespace Controlador35 {
         }
 
         public static string DownloadPackage(UpdateRelease release) {
+            if (Paths.IsMsix) throw new InvalidOperationException("O Windows App Installer deve aplicar atualizações da instalação MSIX.");
             if (release == null || release.PackageUri == null) throw new ArgumentNullException("release");
             byte[] bytes = Download(release.PackageUri, MaxPackageBytes);
             string actual;
@@ -133,6 +134,7 @@ namespace Controlador35 {
         static string Quote(string value) { return "\"" + value.Replace("\"", "\\\"") + "\""; }
 
         public static void LaunchApply(string packagePath, string version, string sha256, string appPath, int processId) {
+            if (Paths.IsMsix) throw new InvalidOperationException("O Windows App Installer deve aplicar atualizações da instalação MSIX.");
             string helper = Path.Combine(Path.GetTempPath(), "Pulso35-Atualizador-" + Guid.NewGuid().ToString("N") + ".exe");
             File.Copy(appPath, helper, false);
             var start = new ProcessStartInfo {
@@ -148,6 +150,7 @@ namespace Controlador35 {
 
         public static int ApplyPackage(string packagePath, string processIdText, string version, string sha256, string appPath) {
             try {
+                if (Paths.IsMsix) throw new InvalidOperationException("O Windows App Installer deve aplicar atualizações da instalação MSIX.");
                 int processId;
                 if (!Int32.TryParse(processIdText, out processId) || processId <= 0) throw new InvalidDataException("Identificador do aplicativo inválido.");
                 WaitForProcess(processId, appPath);
