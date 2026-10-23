@@ -1,0 +1,34 @@
+name: Relatar um problema
+description: Informe um erro reproduzível no Pulso 3.5.
+title: "[Erro]: "
+body:
+  - type: markdown
+    attributes:
+      value: "Não inclua logs com dados pessoais, tokens ou informações privadas."
+  - type: input
+    id: version
+    attributes:
+      label: Versão do aplicativo
+      placeholder: "3.5.0"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Windows e tela
+      description: Informe Windows, modelo/revisão da tela, resolução e VID/PID se souber.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Como reproduzir
+      description: Liste os passos e o resultado observado.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Resultado esperado
+    validations:
+      required: true

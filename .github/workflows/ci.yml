@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    name: Compilar no Windows x64
+    runs-on: windows-latest
+    steps:
+      - name: Obter o código
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Compilar aplicativo e diagnóstico
+        shell: pwsh
+        run: |
+          .\Compilar.ps1
+          foreach ($file in @('Pulso35.exe', 'Pulso35-Diagnostico.exe', 'versao.txt', 'atualizador.json')) {
+            if (-not (Test-Path (Join-Path 'dist\app' $file))) { throw "Saída de compilação ausente: $file" }
+          }

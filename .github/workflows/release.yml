@@ -1,0 +1,89 @@
+name: Publicar release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release-windows:
+    name: Gerar e publicar distribuição Windows
+    runs-on: windows-latest
+    steps:
+      - name: Obter o código
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Validar tag e definir versão
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          if ($tag -notmatch '^v(\d+\.\d+\.\d+(\.\d+)?)$') { throw "Use uma tag vMAJOR.MINOR.PATCH: $tag" }
+          $version = $Matches[1]
+          [System.IO.File]::WriteAllText((Join-Path $env:GITHUB_WORKSPACE 'versao.txt'), $version + "`n", (New-Object System.Text.UTF8Encoding($false)))
+          "RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Compilar aplicativos
+        shell: pwsh
+        run: .\Compilar.ps1
+
+      - name: Configurar canal do repositório
+        shell: pwsh
+        run: |
+          $manifestUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/latest/download/latest.json"
+          $config = @{ manifestUrl = $manifestUrl } | ConvertTo-Json
+          [System.IO.File]::WriteAllText((Join-Path 'dist\app' 'atualizador.json'), $config, (New-Object System.Text.UTF8Encoding($false)))
+
+      - name: Baixar e validar Inno Setup oficial
+        shell: pwsh
+        run: |
+          $url = 'https://files.jrsoftware.org/is/7/innosetup-7.1.0-x64.exe'
+          $setup = Join-Path $env:RUNNER_TEMP 'innosetup-7.1.0-x64.exe'
+          Invoke-WebRequest -Uri $url -OutFile $setup
+          $signature = Get-AuthenticodeSignature -FilePath $setup
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Pyrsys B\.V\.') {
+            throw 'A assinatura digital do Inno Setup não foi validada.'
+          }
+          $installDir = Join-Path $env:RUNNER_TEMP 'InnoSetup'
+          $process = Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', "/DIR=$installDir") -Wait -PassThru
+          if ($process.ExitCode -ne 0 -or -not (Test-Path (Join-Path $installDir 'ISCC.exe'))) { throw 'Não foi possível preparar o compilador Inno Setup.' }
+          $env:INNO_SETUP_COMPILER = Join-Path $installDir 'ISCC.exe'
+          .\Preparar-Instalador.ps1 -SkipBuild
+
+      - name: Preparar pacote e manifesto do atualizador
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $version = $env:RELEASE_VERSION
+          $zipName = "Pulso35-$version.zip"
+          $packageUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$tag/$zipName"
+          .\Preparar-Atualizacao.ps1 -SkipBuild -PackageUrl $packageUrl -Notas "Versão $version do Pulso 3.5."
+          $assets = @(
+            (Join-Path 'dist' "Pulso35-Setup-$version.exe"),
+            (Join-Path 'dist\atualizacao' $zipName),
+            (Join-Path 'dist\atualizacao' 'latest.json')
+          )
+          $lines = foreach ($asset in $assets) {
+            if (-not (Test-Path $asset)) { throw "Artefato ausente: $asset" }
+            $hash = (Get-FileHash -Path $asset -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $([System.IO.Path]::GetFileName($asset))"
+          }
+          [System.IO.File]::WriteAllLines((Join-Path 'dist' 'SHA256SUMS.txt'), $lines, (New-Object System.Text.UTF8Encoding($false)))
+
+      - name: Publicar release no GitHub
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = $env:RELEASE_VERSION
+          $tag = $env:GITHUB_REF_NAME
+          gh release create $tag `
+            "dist\Pulso35-Setup-$version.exe" `
+            "dist\atualizacao\Pulso35-$version.zip" `
+            'dist\atualizacao\latest.json' `
+            'dist\SHA256SUMS.txt' `
+            --verify-tag --title "Pulso 3.5 $version" --generate-notes

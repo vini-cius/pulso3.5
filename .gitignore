@@ -1,0 +1,26 @@
+# Compiled output and downloadable releases
+/dist/
+/bin/
+/obj/
+
+# Local diagnostics and recovered legacy binaries
+/logs/
+/Controlador35.exe
+/DiagnosticoTela35.exe
+/Pulso35.exe
+/Pulso35-Diagnostico.exe
+/previa-controlador.png
+/imagem-teste.png
+/resultado-teste.json
+/Resultado.md
+
+# Visual Studio and local user settings
+/.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.tmp
+*.bak
+Thumbs.db
+Desktop.ini

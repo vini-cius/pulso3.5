@@ -1,0 +1,16 @@
+name: Sugerir uma melhoria
+description: Proponha uma função ou melhoria para o painel.
+title: "[Sugestão]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Que necessidade isso atende?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Como você imagina a solução?
+    validations:
+      required: true
