@@ -5,6 +5,7 @@ $source = Join-Path $PSScriptRoot 'Controlador35.cs'
 $panel = Join-Path $PSScriptRoot 'Painel35.cs'
 $designer = Join-Path $PSScriptRoot 'ThemeDesigner.cs'
 $gamer = Join-Path $PSScriptRoot 'GamerMode.cs'
+$codexMonitor = Join-Path $PSScriptRoot 'CodexMonitor.cs'
 $updater = Join-Path $PSScriptRoot 'UpdateManager.cs'
 $versionFile = Join-Path $PSScriptRoot 'versao.txt'
 $windowsMetadata = Get-ChildItem (Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\UnionMetadata') -Filter Windows.winmd -Recurse -ErrorAction SilentlyContinue |
@@ -30,7 +31,7 @@ if ([string]::IsNullOrWhiteSpace($OutputPath)) {
     $outputDir = Split-Path -Parent $output
     New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
 }
-$compilerArgs = @('/nologo', '/optimize+', '/target:winexe', '/platform:x64', ('/out:"' + $output + '"'), '/reference:System.dll', '/reference:System.Core.dll', '/reference:System.Runtime.dll', '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll', '/reference:System.Management.dll', '/reference:System.Web.Extensions.dll', '/reference:System.IO.Compression.dll', '/reference:System.IO.Compression.FileSystem.dll', ('/reference:"' + $winrtProjection + '"'), ('/reference:"' + $windowsMetadata.FullName + '"'), ('"' + $updater + '"'), ('"' + $panel + '"'), ('"' + $designer + '"'), ('"' + $gamer + '"'), ('"' + $source + '"'))
+$compilerArgs = @('/nologo', '/optimize+', '/target:winexe', '/platform:x64', ('/out:"' + $output + '"'), '/reference:System.dll', '/reference:System.Core.dll', '/reference:System.Runtime.dll', '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll', '/reference:System.Management.dll', '/reference:System.Web.Extensions.dll', '/reference:System.IO.Compression.dll', '/reference:System.IO.Compression.FileSystem.dll', ('/reference:"' + $winrtProjection + '"'), ('/reference:"' + $windowsMetadata.FullName + '"'), ('"' + $updater + '"'), ('"' + $panel + '"'), ('"' + $designer + '"'), ('"' + $gamer + '"'), ('"' + $codexMonitor + '"'), ('"' + $source + '"'))
 $stdout = Join-Path $env:TEMP 'Pulso35-build-out.txt'
 $stderr = Join-Path $env:TEMP 'Pulso35-build-err.txt'
 $process = Start-Process -FilePath $compiler -ArgumentList $compilerArgs -Wait -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr

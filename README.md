@@ -8,6 +8,7 @@ O programa pode ser instalado em computadores diferentes. A instalação padrão
 
 - Relógio e data em português, com opção de mostrar segundos.
 - Uso de CPU, RAM e GPU; temperaturas de CPU/GPU quando o hardware e o provedor de sensores oferecem esses dados.
+- Monitor Codex opcional no editor de temas: exibe o percentual restante dos limites de 5 horas e semanal, quando disponíveis, e os horários de renovação.
 - Modo gamer automático: detecta jogos monitorados em primeiro plano pelo RTSS e lê FPS/frame time do RTSS ou do MSI Afterburner; média e 1% low aparecem quando o Afterburner os fornece. O cartão gamer aparece enquanto o jogo está em foco; modelos anteriores recebem esse cartão na atualização do tema.
 - Clima configurável por cidade; a configuração inicial é Mauá, São Paulo.
 - Editor de tema retrato e paisagem com camadas, arrastar e soltar, redimensionamento, imagens de fundo, texto dinâmico e prévia ao vivo.
@@ -95,3 +96,9 @@ Leia [CONTRIBUTING.md](CONTRIBUTING.md) antes de abrir pull requests. Problemas 
 ## Licença e marcas
 
 O projeto está sob GNU GPL versão 3 ou, a seu critério, qualquer versão posterior; consulte [LICENSE](LICENSE). A referência pública de protocolo para telas Turing Smart Screen está sob GPL-3.0. Este projeto não é afiliado nem endossado por Turing, XuanFang, Kipye ou fabricantes relacionados; os nomes e marcas pertencem a seus respectivos titulares.
+
+## Monitor Codex
+
+No **Estúdio de temas**, adicione **Monitor Codex**, posicione o cartão e salve o tema. Ele consulta os limites a cada minuto enquanto estiver visível. É necessário ter o Codex para Windows ou `codex.exe` no PATH e estar conectado a uma conta ChatGPT compatível no Codex. Os percentuais indicam o limite **restante**; um traço indica que a janela não foi informada.
+
+O cartão mostra **Avisos indisponíveis**: a consulta usa um processo separado e não consegue observar com segurança pedidos de resposta ou aprovação nas conversas abertas no aplicativo. Portanto, ele ainda não alerta sobre perguntas. Não é necessário informar senha ou chave de API ao Pulso. A leitura usa a sessão local do Codex; não copie arquivos de autenticação.

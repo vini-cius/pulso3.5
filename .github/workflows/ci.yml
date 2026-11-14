@@ -28,6 +28,16 @@ jobs:
           }
           if (Test-Path 'dist\app\Pulso35-Diagnostico.exe') { throw 'A compilação não deve gerar o executável de diagnóstico.' }
 
+      - name: Executar verificações do controlador
+        shell: pwsh
+        run: |
+          $testDir = Join-Path $env:RUNNER_TEMP 'pulso35-self-test'
+          New-Item -ItemType Directory -Force $testDir | Out-Null
+          Copy-Item 'dist\app\Pulso35.exe' (Join-Path $testDir 'Pulso35.exe')
+          New-Item -ItemType File (Join-Path $testDir 'portable.flag') | Out-Null
+          $result = Start-Process (Join-Path $testDir 'Pulso35.exe') -ArgumentList '--self-test' -Wait -PassThru
+          if ($result.ExitCode -ne 0) { throw "Verificações do controlador falharam: código $($result.ExitCode)." }
+
       - name: Validar pacote portátil
         shell: pwsh
         run: |

@@ -72,7 +72,7 @@ namespace Controlador35 {
             var add=MakeButton("＋ Adicionar elemento",new Size(190,34),cyan,true);add.SetBounds(12,42,190,34);left.Controls.Add(add);add.Click+=OpenAddMenu;
             var menu=new ContextMenuStrip();
             AddMenu(menu,"Relógio","Clock");AddMenu(menu,"Data","Date");AddMenu(menu,"CPU","CPU");AddMenu(menu,"Memória RAM","RAM");AddMenu(menu,"Uso da GPU","GPU");
-            AddMenu(menu,"Temperatura da CPU","CPU_TEMP");AddMenu(menu,"Temperatura da GPU","GPU_TEMP");AddMenu(menu,"Clima","Weather");AddMenu(menu,"Painel gamer","Game");
+            AddMenu(menu,"Temperatura da CPU","CPU_TEMP");AddMenu(menu,"Temperatura da GPU","GPU_TEMP");AddMenu(menu,"Clima","Weather");AddMenu(menu,"Painel gamer","Game");AddMenu(menu,"Monitor Codex","Codex");
             menu.Items.Add(new ToolStripSeparator());AddMenu(menu,"Medidor / barra","Gauge");AddMenu(menu,"Texto livre","Text");AddMenu(menu,"Imagem","Image");AddMenu(menu,"Forma","Shape");
             add.ContextMenuStrip=menu;layers.SetBounds(12,86,190,320);layers.Anchor=AnchorStyles.Top|AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right;layers.DrawMode=DrawMode.OwnerDrawFixed;layers.ItemHeight=42;layers.BorderStyle=BorderStyle.None;
             layers.BackColor=panel;layers.ForeColor=ink;left.Controls.Add(layers);layers.DrawItem+=DrawLayer;layers.SelectedIndexChanged+=LayerChanged;
@@ -197,17 +197,17 @@ namespace Controlador35 {
         void StyleModeButton(Button b,bool active) {b.BackColor=active?Color.FromArgb(35,78,87):panelRaised;b.ForeColor=active?cyan:ink;}
         void AddWidget(string type) {
             RecordUndo();int width=landscape?480:320,height=landscape?320:480;
-            int w=type=="Game"?Math.Min(444,width-24):type=="Weather"?Math.Min(230,width-24):type=="Clock"?Math.Min(220,width-24):type=="Shape"?100:145;
-            int h=type=="Game"?(landscape?84:108):type=="Weather"?74:type=="Clock"?56:type=="Shape"?70:40;
+            int w=(type=="Game"||type=="Codex")?Math.Min(444,width-24):type=="Weather"?Math.Min(230,width-24):type=="Clock"?Math.Min(220,width-24):type=="Shape"?100:145;
+            int h=type=="Game"?(landscape?84:108):type=="Codex"?108:type=="Weather"?74:type=="Clock"?56:type=="Shape"?70:40;
             var item=new ThemeWidget {Type=type,Name=DisplayName(type),X=Math.Max(0,(width-w)/2),Y=Math.Max(0,(height-h)/2),Width=w,Height=h,Font=draft.Font,FontSize=type=="Clock"?36:type=="Game"?34:20,Text=type=="Text"?"Seu texto":type=="Gauge"?"CPU":"",Bold=type=="Clock"};
             if(type=="CPU")item.AccentKey="CpuAccent";if(type=="RAM")item.AccentKey="RamAccent";if(type=="GPU")item.AccentKey="GpuAccent";
             if(type=="CPU_TEMP")item.AccentKey="CpuAccent";if(type=="GPU_TEMP")item.AccentKey="GpuAccent";if(type=="Weather")item.AccentKey="WeatherAccent";
-            if(type=="Game"){item.Color=0x00FFB454;item.FillColor=0x000B121E;item.UseFill=true;}
+            if(type=="Game"||type=="Codex"){item.Color=0x00FFB454;item.FillColor=0x000B121E;item.UseFill=true;}
             if(type=="Image") { using(var dialog=new OpenFileDialog {Title="Escolha a imagem do elemento",Filter="Imagens|*.png;*.jpg;*.jpeg;*.bmp;*.gif"})if(dialog.ShowDialog(this)!=DialogResult.OK)return;else item.Text=ThemeStore.StoreImage(dialog.FileName); }
             ActiveCanvas.Widgets.Add(item);RebuildLayers(item.Id);RefreshFrame();
         }
         string DisplayName(string type) {
-            switch(type){case "Clock":return "Relógio";case "Date":return "Data";case "CPU":return "CPU";case "RAM":return "Memória RAM";case "GPU":return "Uso da GPU";case "CPU_TEMP":return "Temperatura da CPU";case "GPU_TEMP":return "Temperatura da GPU";case "Weather":return "Clima";case "Game":return "Painel gamer";case "Gauge":return "Medidor";case "Text":return "Texto";case "Image":return "Imagem";case "Shape":return "Forma";default:return type;}
+            switch(type){case "Clock":return "Relógio";case "Date":return "Data";case "CPU":return "CPU";case "RAM":return "Memória RAM";case "GPU":return "Uso da GPU";case "CPU_TEMP":return "Temperatura da CPU";case "GPU_TEMP":return "Temperatura da GPU";case "Weather":return "Clima";case "Game":return "Painel gamer";case "Codex":return "Monitor Codex";case "Gauge":return "Medidor";case "Text":return "Texto";case "Image":return "Imagem";case "Shape":return "Forma";default:return type;}
         }
         void DuplicateSelected() {if(selected==null)return;RecordUndo();var copy=selected.Clone();copy.Id=Guid.NewGuid().ToString("N");copy.Name=(copy.Name??"Elemento")+" cópia";copy.X=Math.Min(Math.Max(0,ActiveCanvas.Widgets.Select(x=>x.X).DefaultIfEmpty(0).Max()+8),Panel.Width(draft)-copy.Width);copy.Y=Math.Min(copy.Y+8,Panel.Height(draft)-copy.Height);ActiveCanvas.Widgets.Add(copy);RebuildLayers(copy.Id);RefreshFrame();}
         void DeleteSelected() {if(selected==null)return;RecordUndo();ActiveCanvas.Widgets.Remove(selected);RebuildLayers(null);RefreshFrame();}
@@ -244,7 +244,7 @@ namespace Controlador35 {
                 var inside=Color.FromArgb(unchecked((int)(0xFF000000u|(uint)selected.FillColor)));fillColor.BackColor=inside;fillColor.ForeColor=Contrast(inside);
                 bool textField=selected.Type=="Text"||selected.Type=="Gauge"||selected.Type=="Date"||selected.Type=="Game";widgetText.ReadOnly=!textField;
                 widgetImage.Visible=selected.Type=="Image";fitBox.Visible=selected.Type=="Image";shapeBox.Visible=selected.Type=="Shape";
-                useFill.Visible=selected.Type=="Shape"||selected.Type=="Game"||selected.Type=="Gauge"||selected.Type=="CPU"||selected.Type=="RAM"||selected.Type=="GPU";
+                useFill.Visible=selected.Type=="Shape"||selected.Type=="Game"||selected.Type=="Codex"||selected.Type=="Gauge"||selected.Type=="CPU"||selected.Type=="RAM"||selected.Type=="GPU";
             }
             loading=false;
         }

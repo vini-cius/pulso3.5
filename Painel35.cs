@@ -22,6 +22,7 @@ namespace Controlador35 {
         public double? Cpu, Ram, Gpu, CpuTemperature, GpuTemperature;
         public double UsedGb, TotalGb;
         public GamerTelemetry Gamer=new GamerTelemetry();
+        public CodexTelemetry Codex=new CodexTelemetry();
         public DateTime At;
     }
     public sealed class Sensors {
@@ -517,6 +518,21 @@ namespace Controlador35 {
                 using(var tick=new Pen(Color.FromArgb(225,235,242,249),1))g.DrawLine(tick,barX+barWidth/2,barY-2,barX+barWidth/2,barY+5);
             }
         }
+        static void DrawCodexWidget(Graphics g,ThemeWidget item,Rectangle b,Metrics metrics,ThemeConfig theme) {
+            CodexTelemetry c=metrics==null?null:metrics.Codex;
+            if(item.UseFill)using(var fill=new SolidBrush(C(item.FillColor)))g.FillRectangle(fill,b);
+            Color accent=C(item.Color,Color.FromArgb(91,229,213));
+            using(var edge=new Pen(Color.FromArgb(95,accent)))g.DrawRectangle(edge,b.X,b.Y,b.Width-1,b.Height-1);
+            int x=b.X+8,w=Math.Max(1,b.Width-16);
+            DrawText(g,"CODEX • RESTANTE",item,new Rectangle(x,b.Y+4,w,17),accent,12,true);
+            bool fresh=c!=null&&c.Updated!=default(DateTime)&&(DateTime.Now-c.Updated).TotalSeconds<150&&(DateTime.Now-c.Updated).TotalSeconds>=-30;
+            string five=fresh&&c.FiveHoursRemaining.HasValue?c.FiveHoursRemaining.Value.ToString("0",CultureInfo.InvariantCulture)+"%":"—";
+            string week=fresh&&c.WeekRemaining.HasValue?c.WeekRemaining.Value.ToString("0",CultureInfo.InvariantCulture)+"%":"—";
+            DrawText(g,"5h  "+five+"     SEMANA  "+week,item,new Rectangle(x,b.Y+24,w,22),C(theme.Foreground),14,true);
+            string resets="Renova: "+(fresh&&c.FiveHoursReset.HasValue?c.FiveHoursReset.Value.ToString("dd/MM HH:mm"):"—")+" / "+(fresh&&c.WeekReset.HasValue?c.WeekReset.Value.ToString("dd/MM HH:mm"):"—");
+            DrawText(g,resets,item,new Rectangle(x,b.Y+48,w,18),C(theme.Muted),9,false);
+            DrawText(g,c==null?"Aguardando Codex":(!fresh&&c.Updated!=default(DateTime)?"Dados desatualizados":c.Status)+" • "+c.Attention,item,new Rectangle(x,b.Y+68,w,28),C(theme.Muted),9,false);
+        }
         static void DrawWidget(Graphics g,ThemeWidget item,Rectangle bounds,DateTime now,Metrics metrics,Weather weather,ThemeConfig theme,bool stale) {
             if(!item.Visible||bounds.Width<=0||bounds.Height<=0)return;
             GraphicsState state=g.Save();g.SetClip(bounds);Color accent=Accent(item,theme);Color foreground=C(theme.Foreground);
@@ -535,6 +551,7 @@ namespace Controlador35 {
                 if(item.Type=="Clock") { DrawText(g,now.ToString(theme.ShowSeconds?"HH:mm:ss":"HH:mm"),item,bounds,C(item.Color,foreground),item.FontSize,item.Bold);return; }
                 if(item.Type=="Date") { DrawText(g,now.ToString(String.IsNullOrWhiteSpace(item.Text)?"ddd, dd MMM":item.Text,Pt),item,bounds,C(item.Color,C(theme.Muted)),item.FontSize,item.Bold);return; }
                 if(item.Type=="Text") { DrawText(g,Expand(item.Text,now,metrics,weather,theme,stale),item,bounds,C(item.Color,foreground),item.FontSize,item.Bold);return; }
+                if(item.Type=="Codex") { DrawCodexWidget(g,item,bounds,metrics,theme);return; }
                 if(item.Type=="Game") { DrawGameWidget(g,item,bounds,Accent(item,theme),metrics,now,weather,theme,stale);return; }
                 if(item.Type=="Weather") {
                     string city=weather==null?"Mauá, SP":weather.City;string temperature=weather!=null&&weather.Temperature.HasValue?weather.Temperature.Value.ToString("0",CultureInfo.InvariantCulture)+"°C":"—°C";

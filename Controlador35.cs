@@ -307,10 +307,11 @@ namespace Controlador35 {
         readonly ContextMenuStrip trayMenu = new ContextMenuStrip();
         volatile Metrics latest = new Metrics();
         volatile GamerTelemetry latestGame=GamerTelemetry.Inactive("Aguardando RTSS ou MSI Afterburner",false);
+        volatile CodexTelemetry latestCodex=new CodexTelemetry();
         volatile Weather weather = new Weather();
         volatile ThemeConfig theme = ThemeStore.Load();
         volatile Place place = Climate.Load();
-        Task sensorsTask, weatherTask, gamerTask, running;
+        Task sensorsTask, weatherTask, gamerTask, codexTask, running;
         CancellationTokenSource cancel;
         volatile bool fullRequested;
         volatile bool gamerModeEnabled;
@@ -480,7 +481,7 @@ namespace Controlador35 {
             sensorsTask = Task.Run(delegate {
                 var sensors = new Sensors();
                 while (!token.IsCancellationRequested) {
-                    try { Metrics sample=sensors.Read();sample.Gamer=latestGame;latest=sample; }
+                    try { Metrics sample=sensors.Read();sample.Gamer=latestGame;sample.Codex=latestCodex;latest=sample; }
                     catch (Exception ex) { Paths.Log("SENSORS " + ex.Message); }
                     token.WaitHandle.WaitOne(2000);
                 }
@@ -497,6 +498,18 @@ namespace Controlador35 {
                         latestGame=sample;Metrics current=latest;if(current!=null)current.Gamer=sample;
                     }
                     token.WaitHandle.WaitOne(250);
+                }
+            });
+            codexTask = Task.Run(delegate {
+                while(!token.IsCancellationRequested) {
+                    ThemeConfig activeTheme=theme;
+                    ThemeCanvas canvas=activeTheme==null?null:activeTheme.Canvas(String.Equals(activeTheme.Orientation,"Landscape",StringComparison.OrdinalIgnoreCase));
+                    if(canvas==null||canvas.Widgets==null||!canvas.Widgets.Any(item=>item!=null&&item.Visible&&item.Type=="Codex")) {
+                        token.WaitHandle.WaitOne(1000);continue;
+                    }
+                    CodexTelemetry sample=CodexMonitor.Read(token);latestCodex=sample;
+                    Metrics current=latest;if(current!=null)current.Codex=sample;
+                    token.WaitHandle.WaitOne(60000);
                 }
             });
             weatherTask = Task.Run(delegate {
@@ -587,7 +600,7 @@ namespace Controlador35 {
             if(!exitRequested && e.CloseReason==CloseReason.UserClosing) { e.Cancel=true; HideToTray(); return; }
             e.Cancel=true; if(shuttingDown) return; shuttingDown=true; previewTimer.Stop(); startupRetryTimer.Stop(); services.Cancel(); Stop(); Enabled=false;
             if(running!=null) await running;
-            var background = Task.WhenAll(new Task[] { sensorsTask,weatherTask,gamerTask }.Where(task => task != null));
+            var background = Task.WhenAll(new Task[] { sensorsTask,weatherTask,gamerTask,codexTask }.Where(task => task != null));
             await Task.WhenAny(background,Task.Delay(1500));
             if(background.IsCompleted) services.Dispose();
             else DisposeAfterServices(background);
@@ -686,6 +699,12 @@ namespace Controlador35 {
             try { Protocol.RegionHeader(new Rectangle(0, 0, 0, 1)); } catch (ArgumentOutOfRangeException) { rejected = true; }
             if (!rejected) throw new Exception("Região vazia foi aceita.");
             TestGamerTelemetry();
+            CodexTelemetry codex=CodexMonitor.ParseLimits("{\"result\":{\"rateLimits\":{\"primary\":{\"windowDurationMins\":300,\"usedPercent\":25,\"resetsAt\":1730947200},\"secondary\":{\"windowDurationMins\":10080,\"usedPercent\":80}}}}");
+            if(codex.FiveHoursRemaining!=75||codex.WeekRemaining!=20||!codex.FiveHoursReset.HasValue||codex.WeekReset.HasValue)throw new Exception("Leitura de limites Codex inválida.");
+            CodexTelemetry missing=CodexMonitor.ParseLimits("{\"result\":{\"rateLimits\":{\"primary\":{\"windowDurationMins\":60,\"usedPercent\":10}}}}");
+            if(missing.FiveHoursRemaining.HasValue||missing.WeekRemaining.HasValue)throw new Exception("Janela desconhecida foi exibida como limite Codex.");
+            CodexTelemetry buckets=CodexMonitor.ParseLimits("{\"result\":{\"rateLimits\":{\"primary\":{\"windowDurationMins\":300,\"usedPercent\":99}},\"rateLimitsByLimitId\":{\"codex\":{\"primary\":{\"windowDurationMins\":10080,\"usedPercent\":42},\"secondary\":{\"windowDurationMins\":300,\"usedPercent\":10}}}}}");
+            if(buckets.FiveHoursRemaining!=90||buckets.WeekRemaining!=58)throw new Exception("Os limites Codex foram interpretados na ordem incorreta.");
             using (var image = Pattern.Full(new DateTime(2026, 10, 22, 12, 34, 56))) {
                 if (Protocol.Pixels(image).Length != 307200) throw new Exception("Tamanho de quadro inválido.");
                 image.Save(Paths.UserFile("imagem-teste.png"), ImageFormat.Png);
