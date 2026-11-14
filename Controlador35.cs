@@ -318,6 +318,7 @@ namespace Controlador35 {
         bool closing, rendering, shuttingDown, exitRequested, trayNoticeShown, checkingUpdate, syncingStartupUi, startupRetryPending;
         public ControllerForm(bool auto, bool startInTray) {
             rendering=Environment.GetCommandLineArgs().Contains("--render-ui");
+            if(startInTray && !rendering) { ShowInTaskbar=false; Opacity=0; }
             gamerModeEnabled=GamerModePreferences.LoadEnabled();gamerMode.Checked=gamerModeEnabled;
             trayIcon.Visible=!rendering;
             weather = new Weather { City = place.Name + ", " + place.Region };
@@ -393,13 +394,14 @@ namespace Controlador35 {
             };
             previewTimer.Tick += delegate { SetPreview(Panel.Render(DateTime.Now,latest,weather,theme));RefreshCaption(); };
             Shown += delegate {
-                Scan(); SetPreview(Panel.Render(DateTime.Now,latest,weather,theme));
+                if(startInTray && !rendering) { HideToTray(false); Opacity=1; }
+                SetPreview(Panel.Render(DateTime.Now,latest,weather,theme));
                 if (!rendering) {
                     StartServices(); previewTimer.Start();
-                    if (startInTray) {
-                        startupRetryPending=true; HideToTray(); TryStartupAutoConnect(); startupRetryTimer.Start();
-                    } else if (auto && devices.Items.Count == 1) Start();
-                }
+                    if (auto || startInTray) {
+                        startupRetryPending=true; startupRetryTimer.Start(); TryStartupAutoConnect();
+                    } else Scan();
+                } else Scan();
             };
             FormClosing += OnClosing;
         }
@@ -407,6 +409,7 @@ namespace Controlador35 {
             if(!startupRetryPending || shuttingDown || rendering || !connect.Enabled) return;
             Scan();
             if(devices.Items.Count==1) Start();
+            else if(devices.Items.Count>1) status.Text="Mais de uma tela encontrada. Selecione a tela e clique em Conectar e mostrar.";
         }
         void SyncStartupControls(bool enabled) {
             syncingStartupUi=true;
@@ -426,7 +429,7 @@ namespace Controlador35 {
             try {
                 bool current = Paths.IsMsix ? await StartupManager.SetEnabledAsync(enabled) : SetUnpackagedStartup(enabled);
                 SyncStartupControls(current);
-                status.Text=current?"O Pulso será iniciado com o Windows e ficará na bandeja.":"A inicialização automática foi desativada.";
+                status.Text=current?"O Pulso iniciará na bandeja com o Windows e conectará a tela automaticamente.":"A inicialização automática foi desativada.";
             } catch(Exception ex) {
                 bool current=false; try { current=StartupManager.IsEnabled(); } catch { }
                 SyncStartupControls(current);
@@ -434,10 +437,10 @@ namespace Controlador35 {
             }
         }
         static bool SetUnpackagedStartup(bool enabled) { StartupManager.SetEnabled(enabled); return StartupManager.IsEnabled(); }
-        void HideToTray() {
+        void HideToTray(bool notify=true) {
             if(WindowState==FormWindowState.Minimized) WindowState=FormWindowState.Normal;
             ShowInTaskbar=false; Hide();
-            if(!trayNoticeShown) {
+            if(notify && !trayNoticeShown) {
                 trayIcon.ShowBalloonTip(2200,"Pulso 3.5","O painel continuará ativo na bandeja e manterá a tela USB atualizada.",ToolTipIcon.Info);
                 trayNoticeShown=true;
             }
@@ -544,8 +547,12 @@ namespace Controlador35 {
         void SetPreview(Bitmap image) { var old=preview.Image; preview.Image=image; if(old!=null) old.Dispose(); }
         void Ui(Action action) { if(IsDisposed || !IsHandleCreated) return; try { BeginInvoke(action); } catch(InvalidOperationException) { } }
         void Busy(bool busy) { connect.Enabled=!busy; devices.Enabled=!busy; refresh.Enabled=!busy; invert.Enabled=!busy; editTheme.Enabled=!busy; stop.Enabled=busy; resend.Enabled=busy; }
-        void Stop() { if(cancel!=null) { cancel.Cancel(); status.Text="Parando após o envio atual…"; stop.Enabled=false; } }
+        void Stop() {
+            startupRetryPending=false; startupRetryTimer.Stop();
+            if(cancel!=null) { cancel.Cancel(); status.Text="Parando após o envio atual…"; stop.Enabled=false; }
+        }
         async void Start() {
+            if(shuttingDown || !connect.Enabled) return;
             var selected=devices.SelectedItem as Device; if(selected==null) { status.Text="Selecione uma tela USB compatível."; return; }
             bool rotation=invert.Checked,landscape=String.Equals(theme.Orientation,"Landscape",StringComparison.OrdinalIgnoreCase); cancel=new CancellationTokenSource(); var token=cancel.Token;
             Busy(true); status.Text="Conectando à " + selected.Port + "…";
@@ -555,7 +562,9 @@ namespace Controlador35 {
                         link.Open(selected,rotation,landscape); fullRequested=true;
                         int width=landscape?480:320,height=landscape?320:480;var bands=Panel.BandsFor(width,height);
                         byte[][] previous = new byte[bands.Length][];
-                        Ui(delegate { status.Text="Conectado à " + selected.Port + ". " + link.Model; startupRetryPending=false; startupRetryTimer.Stop(); });
+                        // Keep startup retries armed: Busy prevents duplicate connections while sending.
+                        // If USB disconnects or the first frame fails, the next timer tick reconnects.
+                        Ui(delegate { status.Text="Conectado à " + selected.Port + ". " + link.Model; });
                         while(!token.IsCancellationRequested) {
                             var tick=Stopwatch.StartNew(); int bytes=0, regions=0; double elapsed=0;
                             using(var image=Panel.Render(DateTime.Now,latest,weather,theme)) {

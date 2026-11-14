@@ -34,7 +34,7 @@ Na página **Releases** do GitHub, escolha uma das opções:
 
 O MSIX precisa de uma assinatura confiável para instalar. Certificados autoassinados são adequados apenas para testes e precisam ser confiados manualmente em cada computador; o certificado de desenvolvimento do Pulso não é usado nas Releases públicas.
 
-Depois de abrir o aplicativo, conecte a tela USB e clique em **Conectar e mostrar**. Para deixá-lo ativo em segundo plano, feche a janela pelo X; use o menu do ícone na bandeja para reabrir, ativar a inicialização com o Windows ou sair. Quando essa opção está ligada, o Pulso inicia oculto na bandeja, procura a tela e conecta automaticamente quando encontra apenas uma tela compatível.
+Depois de abrir o aplicativo, conecte a tela USB e clique em **Conectar e mostrar**. Para deixá-lo ativo em segundo plano, feche a janela pelo X; use o menu do ícone na bandeja para reabrir, ativar a inicialização com o Windows ou sair. Quando essa opção está ligada, o Pulso inicia oculto na bandeja e conecta a tela automaticamente, sem precisar clicar em **Conectar e mostrar**. Ele tenta a cada 5 segundos enquanto o USB fica disponível e volta a conectar se o cabo for desconectado e reconectado. Com mais de uma tela compatível, escolha a tela pela janela principal. O botão **Parar** suspende também as tentativas automáticas até a próxima inicialização.
 
 ## Atualizações
 
